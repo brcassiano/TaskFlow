@@ -30,68 +30,87 @@ A modern, real-time task management application built with Next.js 15, Supabase,
 
 ### High-Level Overview
 
-flowchart TB
-%% USERS
-subgraph U["Users"]
-WB["Web Browser"]
-WA["WhatsApp"]
-N8NW["n8n Workflows"]
-end
-
-%% EDGE / APPS
-subgraph E["Apps / Edge"]
-FE["Next.js Frontend (Vercel)"]
-EVO["Evolution API (WhatsApp Gateway)"]
-N8N["n8n Engine (Automation)"]
-end
-
-%% API
-subgraph A["Next.js API Routes (Vercel)"]
-TASKS["/api/tasks\nGET, POST"]
-TASKID["/api/tasks/:id\nPATCH, DELETE"]
-WEBHOOK["/api/webhook\nPOST"]
-end
-
-%% DATA
-subgraph S["Supabase Platform"]
-DB["PostgreSQL\nprofiles, tasks"]
-RT["Realtime Engine\nWebSockets"]
-end
-
-WB --> FE
-FE --> TASKS
-FE --> TASKID
-
-WA --> EVO --> N8N --> WEBHOOK
-
-TASKS --> DB
-TASKID --> DB
-WEBHOOK --> DB
-
-DB --> RT
-RT --> FE
++-----------------------------------------------------------------------------------+
+|                                     USERS                                         |
+|                                                                                   |
+|   +------------------+        +------------------+        +-------------------+   |
+|   |   Web Browser    |        |     WhatsApp     |        |   n8n Workflows   |   |
+|   +--------+---------+        +--------+---------+        +---------+---------+   |
++------------|--------------------------|-----------------------------|-------------+
+             |                          |                             |
+             v                          v                             v
++---------------------------+   +------------------------+   +------------------------+
+| Next.js Frontend (Vercel) |   | Evolution API (Gateway)|   |  n8n Engine (Automation)|
++-------------+-------------+   +-----------+------------+   +-----------+------------+
+              |                             |                            |
+              |                             +------------+---------------+
+              |                                          |
+              v                                          v
++-----------------------------------------------------------------------------------+
+|                           Next.js API Routes (Vercel)                              |
+|                                                                                   |
+|   /api/tasks (GET, POST)   /api/tasks/:id (PATCH, DELETE)   /api/webhook (POST)   |
++-------------------------------------------+---------------------------------------+
+                                            |
+                                            v
++-----------------------------------------------------------------------------------+
+|                                 SUPABASE PLATFORM                                  |
+|                                                                                   |
+|   +---------------------------+        +---------------------------+              |
+|   | PostgreSQL Database       |        | Realtime Engine           |              |
+|   | - profiles                |<------>| (WebSockets)              |              |
+|   | - tasks                   |  CDC   | broadcasts changes        |              |
+|   +---------------------------+        +---------------------------+              |
++-----------------------------------------------------------------------------------+
 
 ### Data Flow Logic
 
 #### 🔄 Real-time Sync Flow
 
-sequenceDiagram
-participant A as 💻 Browser A
-participant S as ⚡ Supabase (DB + Realtime)
-participant B as 💻 Browser B
-participant W as 📱 WhatsApp (N8N)
+Legend:
+  ---> HTTP request
+  ===> WebSocket broadcast (Realtime)
 
-Note over A,B: Scenario 1: User creates task on Web
-A->>S: POST /api/tasks (Insert)
-S-->>A: 📡 WebSocket Broadcast (INSERT)
-S-->>B: 📡 WebSocket Broadcast (INSERT)
-Note right of B: UI Updates Instantly!
++----------------+      +------------------+      +------------------+      +------------------+
+|  Browser A     |      | Next.js API      |      | Supabase DB      |      | Supabase Realtime|
++--------+-------+      +--------+---------+      +--------+---------+      +--------+---------+
+         |                       |                        |                        |
+         | 1) POST /api/tasks    |                        |                        |
+         +---------------------->| 2) validate + insert   |                        |
+         |                       +----------------------->| 3) INSERT tasks        |
+         |                       |                        +----------+-------------+
+         |                       |                                   |
+         |                       |                        4) change event (CDC)    |
+         |                       |                                   v
+         |                       |                        +----------+-------------+
+         |                       |                        | Realtime broadcasts    |
+         |                       |                        +----------+-------------+
+         |                       |                                   |
+         | 5) UI updates         |                                   |
+         |<======================+===================================+===============> to Browser B
+         |      (INSERT payload)                                     |        (INSERT payload)
+         v                                                           v
++----------------+                                          +----------------+
+|  Browser A UI  |                                          |  Browser B UI  |
+|  updates now   |                                          |  updates now   |
++----------------+                                          +----------------+
 
-Note over A,B: Scenario 2: User sends message
-W->>S: POST /api/webhook (Insert)
-S-->>A: 📡 WebSocket Broadcast (INSERT)
-S-->>B: 📡 WebSocket Broadcast (INSERT)
-Note left of A: UI Updates Instantly!
+WhatsApp path (creates the same DB event -> same WebSocket updates):
++----------------+      +------------------+      +----------------+      +------------------+
+| WhatsApp User  |      | Evolution API    |      | n8n Workflow   |      | /api/webhook     |
++--------+-------+      +--------+---------+      +--------+-------+      +--------+---------+
+         | "/task add X"         |                        |                        |
+         +---------------------->| webhook event          |                        |
+         |                       +----------------------->| parse command           |
+         |                       |                        +----------------------->| POST action=create
+         |                       |                        |                        |
+         |                       |                        |                        v
+         |                       |                        |                (goes to Supabase DB insert)
+         |                       |                        |                        |
+         |                       |                        +<-----------------------+
+         |                       |                        | response message        |
+         +<----------------------+<-----------------------+------------------------+
+                 "✅ Task created"
 
 ## 📦 Project Structure
 
