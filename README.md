@@ -30,125 +30,122 @@ A modern, real-time task management application built with Next.js 15, Supabase,
 
 ### High-Level Overview
 
-HIGH-LEVEL OVERVIEW
-
-+------------------+        +------------------+
-|   Web Browser    |        |     WhatsApp     |
-+--------+---------+        +--------+---------+
-         |                           |
-         |                           v
-         |                 +----------------------+
-         |                 |  Evolution API       |
-         |                 |  (WhatsApp Gateway)  |
-         |                 +----------+-----------+
-         |                            |
-         |                            v
-         |                 +----------------------+
-         |                 |  n8n Engine          |
-         |                 |  (Automation)        |
-         |                 +----------+-----------+
-         |                            |
-         v                            v
-+---------------------------+   +---------------------------+
-| Next.js Frontend (Vercel) |   | Next.js API (Vercel)      |
-+-------------+-------------+   | - /api/webhook (POST)      |
-              |                 +-------------+-------------+
-              |                               |
-              |                               |
-              v                               v
-        +---------------------------+   +---------------------------+
-        | Next.js API (Vercel)      |   | Supabase Platform         |
-        | - /api/tasks (GET, POST)  |   | +---------------------+   |
-        | - /api/tasks/:id          |   | | PostgreSQL Database  |   |
-        |   (PATCH, DELETE)         |   | | - profiles           |   |
-        +-------------+-------------+   | | - tasks              |   |
-                      |                 | +----------+----------+   |
-                      |                 |            |              |
-                      |                 | +----------v----------+   |
-                      +-----------------> | Realtime Engine      |   |
-                                        | (WebSockets)          |   |
-                                        +-----------------------+   |
-                                        +---------------------------+
-
++---------------------------+
+|           USERS           |
++-------------+-------------+
+              |
+              v
++---------------------------+           +---------------------------+
+| Web Browser               |           | WhatsApp                  |
++-------------+-------------+           +-------------+-------------+
+              |                                       |
+              v                                       v
++---------------------------+           +---------------------------+
+| Next.js Frontend (Vercel) |           | Evolution API (Gateway)   |
++-------------+-------------+           +-------------+-------------+
+              |                                       |
+              |                                       v
+              |                           +-------------------------+
+              |                           | n8n Engine (Automation) |
+              |                           +-----------+-------------+
+              |                                       |
+              v                                       v
++--------------------------------------------------------------+
+|                 Next.js API Routes (Vercel)                  |
+|  /api/tasks (GET, POST)                                      |
+|  /api/tasks/:id (PATCH, DELETE)                              |
+|  /api/webhook (POST)                                         |
++-------------------------------+------------------------------+
+                                |
+                                v
++--------------------------------------------------------------+
+|                      Supabase Platform                       |
+|  +--------------------------+   +--------------------------+ |
+|  | PostgreSQL Database      |   | Realtime Engine          | |
+|  | - profiles               |<->| (WebSockets)             | |
+|  | - tasks                  |   | broadcasts DB changes    | |
+|  +--------------------------+   +--------------------------+ |
++--------------------------------------------------------------+
 
 ### Data Flow Logic
 
 #### 🔄 Real-time Sync Flow
 
-REAL-TIME SYNC FLOW (WEB + WHATSAPP)
+### REAL-TIME SYNC FLOW (WEB)
 
-WEB (UI)
-+----------------------+
-| Browser A (UI)        |
-+----------+-----------+
-           |
-           | POST /api/tasks
-           v
-+----------------------+
-| Next.js API (Vercel)  |
-| /api/tasks             |
-+----------+-----------+
-           |
-           | INSERT tasks
-           v
-+----------------------+
-| Supabase Postgres     |
-+----------+-----------+
-           |
-           | change event (CDC)
-           v
-+----------------------+
-| Supabase Realtime     |
-| (WebSockets)          |
-+----+-------------+---+
-     |             |
-     | WS INSERT   | WS INSERT
-     v             v
-+---------+     +---------+
-|Browser A|     |Browser B|
-|updates  |     |updates  |
-+---------+     +---------+
++--------------------+
+| Browser A (UI)      |
++---------+----------+
+          |
+          | POST /api/tasks
+          v
++--------------------+
+| Next.js API (Vercel)|
++---------+----------+
+          |
+          | INSERT tasks
+          v
++--------------------+
+| Supabase Postgres   |
++---------+----------+
+          |
+          | change event (CDC)
+          v
++--------------------+
+| Supabase Realtime   |
+| (WebSockets)        |
++----+----------+----+
+     |          |
+     | WS       | WS
+     v          v
++--------+   +--------+
+|BrowserA|   |BrowserB|
+|updates |   |updates |
++--------+   +--------+
 
 
-WHATSAPP (Automation)
-+----------------------+
-| WhatsApp User         |
-+----------+-----------+
-           |
-           | message: /task add Buy milk
-           v
-+----------------------+
-| Evolution API         |
-+----------+-----------+
-           |
-           v
-+----------------------+
-| n8n Workflow          |
-+----------+-----------+
-           |
-           | POST /api/webhook  (x-webhook-secret)
-           v
-+----------------------+
-| Next.js API (Vercel)  |
-| /api/webhook           |
-+----------+-----------+
-           |
-           | INSERT tasks  (same table)
-           v
-+----------------------+
-| Supabase Postgres     |
-+----------+-----------+
-           |
-           v
-+----------------------+
-| Supabase Realtime     |
-+----+-------------+---+
-     |             |
-     v             v
-+---------+     +---------+
-|Browser A|     |Browser B|
-|updates  |     |updates  |
-+---------+     +---------+
+### REAL-TIME SYNC FLOW (WHATSAPP)
+
++--------------------+
+| WhatsApp User       |
++---------+----------+
+          |
+          | "/task add Buy milk"
+          v
++--------------------+
+| Evolution API       |
++---------+----------+
+          |
+          | webhook event
+          v
++--------------------+
+| n8n Workflow        |
++---------+----------+
+          |
+          | POST /api/webhook
+          | (x-webhook-secret)
+          v
++--------------------+
+| Next.js API (Vercel)|
++---------+----------+
+          |
+          | INSERT tasks
+          v
++--------------------+
+| Supabase Postgres   |
++---------+----------+
+          |
+          | change event (CDC)
+          v
++--------------------+
+| Supabase Realtime   |
++----+----------+----+
+     |          |
+     v          v
++--------+   +--------+
+|BrowserA|   |BrowserB|
+|updates |   |updates |
++--------+   +--------+
 
 ## 📦 Project Structure
 
