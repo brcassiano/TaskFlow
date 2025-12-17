@@ -1,0 +1,4 @@
+{
+  "/api/tasks/route": "app/api/tasks/route.js",
+  "/dashboard/page": "app/dashboard/page.js"
+}
