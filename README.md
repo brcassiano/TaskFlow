@@ -30,148 +30,119 @@ A modern, real-time task management application built with Next.js 15, Supabase,
 
 ### High-Level Overview
 
-+---------------------------+
-|           USERS           |
-+-------------+-------------+
-              |
-              v
-+---------------------------+           +---------------------------+
-| Web Browser               |           | WhatsApp                  |
-+-------------+-------------+           +-------------+-------------+
-              |                                       |
-              v                                       v
-+---------------------------+           +---------------------------+
-| Next.js Frontend (Vercel) |           | Evolution API (Gateway)   |
-+-------------+-------------+           +-------------+-------------+
-              |                                       |
-              |                                       v
-              |                           +-------------------------+
-              |                           | n8n Engine (Automation) |
-              |                           +-----------+-------------+
-              |                                       |
-              v                                       v
-+--------------------------------------------------------------+
-|                 Next.js API Routes (Vercel)                  |
-|  /api/tasks (GET, POST)                                      |
-|  /api/tasks/:id (PATCH, DELETE)                              |
-|  /api/webhook (POST)                                         |
-+-------------------------------+------------------------------+
-                                |
-                                v
-+--------------------------------------------------------------+
-|                      Supabase Platform                       |
-|  +--------------------------+   +--------------------------+ |
-|  | PostgreSQL Database      |   | Realtime Engine          | |
-|  | - profiles               |<->| (WebSockets)             | |
-|  | - tasks                  |   | broadcasts DB changes    | |
-|  +--------------------------+   +--------------------------+ |
-+--------------------------------------------------------------+
+```
+graph TB
+    subgraph USERS["👥 Users"]
+        WB["Web Browser"]
+        WA["WhatsApp"]
+    end
+
+    subgraph EDGE["⚡ Edge Layer"]
+        FE["Next.js Frontend<br/>(Vercel)"]
+        EVO["Evolution API<br/>(WhatsApp Gateway)"]
+        N8N["n8n Engine<br/>(Automation)"]
+    end
+
+    subgraph API["🔌 API Layer (Vercel)"]
+        TASKS["/api/tasks<br/>GET, POST"]
+        TASKID["/api/tasks/:id<br/>PATCH, DELETE"]
+        WEBHOOK["/api/webhook<br/>POST"]
+    end
+
+    subgraph DATA["💾 Data Layer"]
+        DB["PostgreSQL<br/>profiles, tasks"]
+        RT["Realtime Engine<br/>WebSockets"]
+    end
+
+    WB --> FE
+    FE --> TASKS
+    FE --> TASKID
+
+    WA --> EVO
+    EVO --> N8N
+    N8N --> WEBHOOK
+
+    TASKS --> DB
+    TASKID --> DB
+    WEBHOOK --> DB
+
+    DB --> RT
+    RT -.->|broadcasts| FE
+    RT -.->|broadcasts| WB
+
+    style USERS fill:#e1f5ff
+    style EDGE fill:#fff4e1
+    style API fill:#ffe1f5
+    style DATA fill:#e1ffe1
+```
 
 ### Data Flow Logic
 
 #### 🔄 Real-time Sync Flow
 
-### REAL-TIME SYNC FLOW (WEB)
+```
+sequenceDiagram
+    autonumber
+    participant WEB as 💻 Browser A
+    participant API as Next.js API
+    participant DB as Supabase DB
+    participant RT as Realtime Engine
+    participant WEB2 as 💻 Browser B
+    participant WA as 📱 WhatsApp
+    participant EVO as Evolution API
+    participant N8N as n8n
+    
+    rect rgb(240, 248, 255)
+        Note over WEB,WEB2: Scenario 1: User creates task via Web UI
+        WEB->>API: POST /api/tasks
+        API->>DB: INSERT INTO tasks
+        DB->>RT: Change event (CDC)
+        RT-->>WEB: WebSocket broadcast
+        RT-->>WEB2: WebSocket broadcast
+        Note over WEB,WEB2: Both browsers update instantly
+    end
 
-+--------------------+
-| Browser A (UI)      |
-+---------+----------+
-          |
-          | POST /api/tasks
-          v
-+--------------------+
-| Next.js API (Vercel)|
-+---------+----------+
-          |
-          | INSERT tasks
-          v
-+--------------------+
-| Supabase Postgres   |
-+---------+----------+
-          |
-          | change event (CDC)
-          v
-+--------------------+
-| Supabase Realtime   |
-| (WebSockets)        |
-+----+----------+----+
-     |          |
-     | WS       | WS
-     v          v
-+--------+   +--------+
-|BrowserA|   |BrowserB|
-|updates |   |updates |
-+--------+   +--------+
-
-
-### REAL-TIME SYNC FLOW (WHATSAPP)
-
-+--------------------+
-| WhatsApp User       |
-+---------+----------+
-          |
-          | "/task add Buy milk"
-          v
-+--------------------+
-| Evolution API       |
-+---------+----------+
-          |
-          | webhook event
-          v
-+--------------------+
-| n8n Workflow        |
-+---------+----------+
-          |
-          | POST /api/webhook
-          | (x-webhook-secret)
-          v
-+--------------------+
-| Next.js API (Vercel)|
-+---------+----------+
-          |
-          | INSERT tasks
-          v
-+--------------------+
-| Supabase Postgres   |
-+---------+----------+
-          |
-          | change event (CDC)
-          v
-+--------------------+
-| Supabase Realtime   |
-+----+----------+----+
-     |          |
-     v          v
-+--------+   +--------+
-|BrowserA|   |BrowserB|
-|updates |   |updates |
-+--------+   +--------+
+    rect rgb(240, 255, 240)
+        Note over WA,WEB2: Scenario 2: User creates task via WhatsApp
+        WA->>EVO: "/task add Buy milk"
+        EVO->>N8N: Webhook trigger
+        N8N->>API: POST /api/webhook (x-webhook-secret)
+        API->>DB: INSERT INTO tasks
+        DB->>RT: Change event (CDC)
+        RT-->>WEB: WebSocket broadcast
+        RT-->>WEB2: WebSocket broadcast
+        N8N-->>WA: ✅ Task created
+    end
+```
 
 ## 📦 Project Structure
 
+```
 taskflow/
 ├── app/
-│ ├── api/
-│ │ ├── tasks/
-│ │ │ ├── route.ts # GET, POST /api/tasks
-│ │ │ └── [id]/
-│ │ │ └── route.ts # PATCH, DELETE /api/tasks/:id
-│ │ └── webhook/
-│ │ └── route.ts # POST /api/webhook (N8N integration)
-│ ├── dashboard/
-│ │ └── page.tsx # Main dashboard
-│ ├── layout.tsx
-│ └── page.tsx # Landing page
+│   ├── api/
+│   │   ├── tasks/
+│   │   │   ├── route.ts
+│   │   │   └── [id]/
+│   │   │       └── route.ts
+│   │   └── webhook/
+│   │       └── route.ts
+│   ├── dashboard/
+│   │   └── page.tsx
+│   ├── layout.tsx
+│   └── page.tsx
 ├── components/
-│ ├── TaskForm.tsx # Create/edit task form
-│ ├── TaskList.tsx # Task list with real-time updates
-│ ├── TaskItem.tsx # Individual task card
-│ └── ConfirmModal.tsx # Delete confirmation modal
+│   ├── TaskForm.tsx
+│   ├── TaskList.tsx
+│   ├── TaskItem.tsx
+│   └── ConfirmModal.tsx
 ├── lib/
-│ └── supabase.ts # Supabase client configuration
-├── types.ts # TypeScript type definitions
-├── .env.local # Environment variables
+│   └── supabase.ts
+├── types.ts
+├── .env.example
 └── package.json
+```
+```
 
 ## 🚀 Getting Started
 
