@@ -181,7 +181,7 @@ export default function DashboardClient() {
               </div>
               <div className="bg-green-50 rounded-lg p-5 border-2 border-green-300">
                 <code className="text-lg font-mono font-bold text-green-900 block text-center mb-4">
-                  link {linkCode}
+                  #to-do-list link {linkCode}
                 </code>
                 <a
                   href={getWhatsAppLink()}
