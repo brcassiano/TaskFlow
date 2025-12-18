@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     console.log('POST /api/link - phone:', phone, 'code:', code);
 
-    // 1) Procura guest_id que termina com o code
+    // 1) Procura guest_id que termina com o code na tabela user_links
     const { data: found, error: findError } = await supabase
       .from('user_links')
       .select('*')
@@ -84,13 +84,57 @@ export async function POST(request: NextRequest) {
 
     let guestId: string;
 
-    // 2) Se não achou, cria uma nova entry com guest_id = guest-{code}
+    // 2) Se não achou em user_links, procura em tasks (o user_id que contém o code)
     if (!found || found.length === 0) {
-      const newGuestId = `guest-${code}`;
+      console.log('Not found in user_links, searching in tasks...');
+      
+      const { data: tasksWithCode, error: taskFindError } = await supabase
+        .from('tasks')
+        .select('user_id')
+        .ilike('user_id', `%${code}%`)
+        .limit(1);
 
+      if (taskFindError) {
+        return NextResponse.json(
+          { success: false, error: taskFindError.message },
+          { status: 400 }
+        );
+      }
+
+      if (!tasksWithCode || tasksWithCode.length === 0) {
+        // Se não achou em nenhum lugar, cria novo
+        const newGuestId = `guest-${code}`;
+
+        const { data: created, error: createError } = await supabase
+          .from('user_links')
+          .insert({ guest_id: newGuestId, phone })
+          .select()
+          .single();
+
+        if (createError) {
+          return NextResponse.json(
+            { success: false, error: createError.message },
+            { status: 400 }
+          );
+        }
+
+        guestId = newGuestId;
+        console.log('Created new guest link:', newGuestId, 'for phone:', phone);
+        
+        return NextResponse.json(
+          { success: true, data: created, action: 'created' },
+          { status: 201 }
+        );
+      }
+
+      // Achou em tasks! Use esse user_id
+      guestId = tasksWithCode[0].user_id;
+      console.log('Found guest in tasks:', guestId);
+
+      // Criar entry em user_links
       const { data: created, error: createError } = await supabase
         .from('user_links')
-        .insert({ guest_id: newGuestId, phone })
+        .insert({ guest_id: guestId, phone })
         .select()
         .single();
 
@@ -101,37 +145,25 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      guestId = newGuestId;
-
-      // Migrar tasks do guest para o phone
-      const { error: migrateError } = await supabase
-        .from('tasks')
-        .update({ user_id: phone })
-        .eq('user_id', newGuestId);
-
-      if (migrateError) {
-        console.error('Error migrating tasks:', migrateError);
-      }
-
-      console.log('Created new guest link:', newGuestId, 'for phone:', phone);
+      console.log('Created user_link for existing guest:', guestId);
       return NextResponse.json(
         { success: true, data: created, action: 'created' },
         { status: 201 }
       );
     }
 
-    // 3) Se achou, atualiza o phone (CORRIGIDO: sem constraint conflict)
+    // 3) Se achou em user_links, atualizar o phone
     const existingGuestId = found[0].guest_id as string;
     const now = new Date().toISOString();
 
-    // ✅ CORRIGIDO: Primeiro deletar antigos links desse phone
+    // Deletar antigos links desse phone
     await supabase
       .from('user_links')
       .delete()
       .eq('phone', phone)
       .neq('guest_id', existingGuestId);
 
-    // ✅ CORRIGIDO: Usar update ao invés de upsert para evitar constraint
+    // Atualizar com o novo phone
     const { data: linked, error: linkError } = await supabase
       .from('user_links')
       .update({ 
@@ -156,17 +188,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Migrar tasks do guest para o phone
-    const { error: migrateError } = await supabase
-      .from('tasks')
-      .update({ user_id: phone })
-      .eq('user_id', existingGuestId);
-
-    if (migrateError) {
-      console.error('Error migrating tasks:', migrateError);
-    }
-
-    console.log('Linked existing guest:', existingGuestId, 'to phone:', phone);
+    console.log('Updated user_link:', existingGuestId, 'to phone:', phone);
     return NextResponse.json(
       { success: true, data: linked, action: 'linked' },
       { status: 200 }
