@@ -1,124 +1,33 @@
-# ============================================
-# 🔒 CREDENCIAIS E SECRETS
-# ============================================
+cat > .gitignore << 'EOF'
+# Credentials
 .env
 .env.local
 .env*.local
-.env.development
-.env.test
-.env.production
 !.env.example
 
-# Arquivos de config sensíveis
-config.json
-secrets.json
-credentials.json
-*-credentials.json
-*.pem
-*.key
-*.cert
-*.p12
-
-# ============================================
-# 📦 DEPENDÊNCIAS
-# ============================================
+# Dependencies
 node_modules/
-/.pnp
-.pnp.js
-.yarn/install-state.gz
 
-# ============================================
-# 🔨 NEXT.JS
-# ============================================
+# Next.js
 .next/
 out/
 build/
-dist/
 
-# Next.js cache
-.next/cache/
-
-# ============================================
-# 📊 LOGS E DEBUG
-# ============================================
+# Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-.pnpm-debug.log*
 
-# ============================================
-# 🧪 TESTES
-# ============================================
-coverage/
-.nyc_output/
-*.lcov
-
-# ============================================
-# 💻 SISTEMA OPERACIONAL
-# ============================================
-# macOS
+# OS
 .DS_Store
-.AppleDouble
-.LSOverride
-._*
-
-# Windows
 Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
 
-# Linux
-*~
-.directory
-.Trash-*
-
-# ============================================
-# 🛠️ IDEs
-# ============================================
-# VSCode
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
-
-# JetBrains
-.idea/
-*.iml
-*.iws
-
-# ============================================
-# 🗂️ TYPESCRIPT
-# ============================================
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
 
-# ============================================
-# ☁️ VERCEL
-# ============================================
+# Vercel
 .vercel
-.vercel.json
 
-# ============================================
-# 🐳 DOCKER
-# ============================================
-docker-compose.override.yml
-
-# ============================================
-# 🗄️ DATABASES
-# ============================================
-*.db
-*.sqlite
-*.sqlite3
-
-# ============================================
-# 🔧 BACKUP E TEMP
-# ============================================
-*.tmp
-*.temp
-*.bak
-*.backup
-*.swp
-*~
+# Misc
 .cache/
+*.tmp
+EOF
