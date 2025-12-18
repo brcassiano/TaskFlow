@@ -38,10 +38,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('chatSessions')
+      .from('chat_sessions')
       .select('*')
-      .eq('userPhone', phone)
-      .eq('isActive', true)
+      .eq('user_phone', phone)
+      .eq('is_active', true)
       .limit(1);
 
     if (error) {
@@ -77,18 +77,18 @@ export async function POST(request: NextRequest) {
     }
 
     const payload: any = {
-      userPhone: phone,
-      isActive: true,
-      lastInteraction: new Date().toISOString(),
+      user_phone: phone,
+      is_active: true,
+      last_interaction: new Date().toISOString(),
     };
 
     if (Object.prototype.hasOwnProperty.call(body, 'context')) {
-      payload.context = body.context ?? null;
+      payload.context = body.context ?? {};
     }
 
     const { data, error } = await supabase
-      .from('chatSessions')
-      .upsert(payload, { onConflict: 'userPhone' })
+      .from('chat_sessions')
+      .upsert(payload, { onConflict: 'user_phone' })
       .select()
       .single();
 
@@ -125,12 +125,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('chatSessions')
+      .from('chat_sessions')
       .update({
-        isActive: false,
-        lastInteraction: new Date().toISOString(),
+        is_active: false,
+        last_interaction: new Date().toISOString(),
       })
-      .eq('userPhone', phone)
+      .eq('user_phone', phone)
       .select();
 
     if (error) {
