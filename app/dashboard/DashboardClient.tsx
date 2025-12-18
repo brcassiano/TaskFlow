@@ -12,12 +12,11 @@ export default function DashboardClient() {
   const [linkCode, setLinkCode] = useState<string>('');
   const [isLinked, setIsLinked] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-
   const [refreshKey, setRefreshKey] = useState(0);
   const [taskCount, setTaskCount] = useState(0);
-
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
+  const [bannerShown, setBannerShown] = useState(false);
 
   const WHATSAPP_NUMBER = '5511984872770';
 
@@ -26,44 +25,63 @@ export default function DashboardClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // Check link status no banco quando userId muda
   useEffect(() => {
     console.log('useEffect: userId changed to:', userId);
-    if (userId && !userId.startsWith('guest-')) {
-      console.log('Calling checkLinkStatus for non-guest user');
+
+    if (userId && userId.startsWith('guest-')) {
+      console.log('Guest user - checking if link already exists');
       checkLinkStatus();
-    } else {
-      console.log('Skipping checkLinkStatus - userId is guest or empty');
+    } else if (userId && !userId.startsWith('guest-')) {
+      console.log('Non-guest user, setting as linked');
+      setIsLinked(true);
     }
   }, [userId]);
 
+  // Show banner ONLY quando: não está linkado, tem 1+ tasks, é a primeira vez e não foi mostrado ainda
   useEffect(() => {
-    if (!isLinked && taskCount > 0 && linkCode) {
-      const bannerShown = localStorage.getItem('taskflow_banner_shown');
-      if (!bannerShown) setShowBanner(true);
+    if (!isLinked && taskCount > 0 && !bannerShown && linkCode) {
+      console.log('Showing banner - first time with tasks');
+      setShowBanner(true);
+      setBannerShown(true);
+      localStorage.setItem(`taskflow_banner_shown_${userId}`, 'true');
     }
-  }, [taskCount, isLinked, linkCode]);
+  }, [taskCount, isLinked, linkCode, bannerShown, userId]);
 
   async function checkLinkStatus() {
     try {
       console.log('checkLinkStatus: Checking link status for phone:', userId);
-      const res = await fetch(`/api/link?phone=${userId}`);
+      const res = await fetch(`/api/link?phone=${encodeURIComponent(userId)}`);
       const data = await res.json();
+
       console.log('checkLinkStatus: Link status response:', data);
 
       const linked = data.data && Array.isArray(data.data) && data.data.length > 0;
       console.log('checkLinkStatus: Is linked:', linked);
 
-      setIsLinked(linked);
+      if (linked) {
+        const linkedPhoneNumber = data.data[0].phone;
+        console.log('User was linked to phone:', linkedPhoneNumber);
+
+        localStorage.setItem('taskflow_user_id', linkedPhoneNumber);
+        localStorage.setItem('taskflow_linked', 'true');
+        setUserId(linkedPhoneNumber);
+        setIsLinked(true);
+      } else {
+        console.log('User is still a guest');
+        setIsLinked(false);
+      }
+
       localStorage.setItem('taskflow_linked', linked ? 'true' : 'false');
     } catch (err) {
       console.error('checkLinkStatus: Error checking link status:', err);
+      setIsLinked(false);
     }
   }
 
   function initializeUser() {
     try {
       console.log('initializeUser: called');
+
       const phoneParam = searchParams.get('phone');
       console.log('initializeUser: phoneParam:', phoneParam);
 
@@ -75,7 +93,6 @@ export default function DashboardClient() {
         console.log('initializeUser: Set userId to phone:', formattedPhone);
         localStorage.setItem('taskflow_user_id', formattedPhone);
         localStorage.setItem('taskflow_linked', 'true');
-
         setUserId(formattedPhone);
         setIsLinked(true);
         setIsLoading(false);
@@ -84,11 +101,16 @@ export default function DashboardClient() {
 
       const savedUserId = localStorage.getItem('taskflow_user_id');
       const savedLinked = localStorage.getItem('taskflow_linked') === 'true';
+
       console.log('initializeUser: savedUserId:', savedUserId, 'savedLinked:', savedLinked);
 
       if (savedUserId) {
         setUserId(savedUserId);
         setIsLinked(savedLinked);
+
+        // Verificar se o banner já foi mostrado para este usuário
+        const bannerWasShown = localStorage.getItem(`taskflow_banner_shown_${savedUserId}`) === 'true';
+        setBannerShown(bannerWasShown);
 
         if (savedUserId.startsWith('guest-') && !savedLinked) {
           const code = savedUserId.slice(-8);
@@ -105,10 +127,10 @@ export default function DashboardClient() {
       console.log('initializeUser: Set userId to guest:', guestId);
       localStorage.setItem('taskflow_user_id', guestId);
       localStorage.setItem('taskflow_linked', 'false');
-
       setUserId(guestId);
       setIsLinked(false);
       setLinkCode(code.toUpperCase());
+      setBannerShown(false); // Reset banner flag para novo usuário
       setIsLoading(false);
     } catch (error) {
       console.error('initializeUser: Error initializing user:', error);
@@ -130,11 +152,12 @@ export default function DashboardClient() {
 
   function closeBanner() {
     setShowBanner(false);
-    localStorage.setItem('taskflow_banner_shown', 'true');
   }
 
   function getWhatsAppLink() {
-    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`#to-do-list link ${linkCode}`)}`;
+    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+      `#to-do-list link ${linkCode}`
+    )}`;
   }
 
   if (isLoading) {
@@ -181,15 +204,20 @@ export default function DashboardClient() {
                 <h3 className="text-lg font-bold text-green-900 mb-1">
                   Great! First task created!
                 </h3>
-                <p className="text-sm text-green-800 mb-3">Want to manage via WhatsApp too?</p>
+                <p className="text-sm text-green-800 mb-3">
+                  Want to manage via WhatsApp too?
+                </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowLinkModal(true)}
-                    className="bg-green-600 text-white py-2 px-4 rounded-lg text-sm"
+                    className="bg-green-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
                   >
                     Link Now
                   </button>
-                  <button onClick={closeBanner} className="text-green-700 text-sm underline">
+                  <button
+                    onClick={closeBanner}
+                    className="text-green-700 text-sm underline hover:text-green-800"
+                  >
                     Not now
                   </button>
                 </div>
@@ -200,30 +228,39 @@ export default function DashboardClient() {
 
         {showLinkModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl p-6 max-w-md w-full relative">
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full relative shadow-2xl">
               <button
                 onClick={() => setShowLinkModal(false)}
-                className="absolute top-4 right-4 text-gray-400 text-2xl"
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl font-bold transition-colors"
               >
                 ×
               </button>
+
               <div className="text-center mb-6">
                 <div className="text-5xl mb-3">📱</div>
-                <h2 className="text-2xl font-bold">Link WhatsApp</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Link WhatsApp</h2>
               </div>
-              <div className="bg-green-50 rounded-lg p-5 border-2 border-green-300">
-                <code className="text-lg font-mono font-bold text-green-900 block text-center mb-4">
+
+              <div className="bg-green-50 rounded-lg p-5 border-2 border-green-300 mb-4">
+                <p className="text-sm text-gray-600 mb-3">
+                  Send this message to the WhatsApp bot:
+                </p>
+                <code className="text-lg font-mono font-bold text-green-900 block text-center mb-4 bg-white p-3 rounded border border-green-200">
                   #to-do-list link {linkCode}
                 </code>
                 <a
                   href={getWhatsAppLink()}
                   target="_blank"
                   rel="noreferrer"
-                  className="block w-full bg-green-600 text-white py-3 rounded-lg text-center font-medium"
+                  className="block w-full bg-green-600 text-white py-3 rounded-lg text-center font-medium hover:bg-green-700 transition-colors"
                 >
                   Open WhatsApp
                 </a>
               </div>
+
+              <p className="text-xs text-gray-500 text-center">
+                After linking, your tasks will sync automatically
+              </p>
             </div>
           </div>
         )}
