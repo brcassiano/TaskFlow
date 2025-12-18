@@ -1,202 +1,272 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
-function normalizePhone(input: string) {
-  const p = String(input || '').trim();
-  return p;
-}
-
-// GET - Check link status
-export async function GET(request: NextRequest) {
+/**
+ * POST /api/link
+ * 
+ * Handles linking WhatsApp account with guest user
+ * Triggered by "link <CODE>" command in WhatsApp
+ * 
+ * Body: {
+ *   phone: string (WhatsApp number with country code)
+ *   code: string (Last 8 characters of task UUID)
+ *   userId: string (UUID or guest-XXXX)
+ * }
+ */
+export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerClient();
-    const { searchParams } = new URL(request.url);
-    const phone = normalizePhone(searchParams.get('phone') || '');
+    const body = await request.json();
+    const { phone, code, userId } = body;
 
-    if (!phone) {
+    if (!phone || !code) {
       return NextResponse.json(
-        { success: false, error: 'phone is required' },
+        { error: 'phone and code are required' },
         { status: 400 }
       );
     }
 
-    const { data, error } = await supabase
+    // Step 1: Find task by code (partial UUID match)
+    const { data: task, error: taskError } = await supabase
+      .from('tasks')
+      .select('id, user_id, title')
+      .ilike('id', `%${code}%`)
+      .maybeSingle();
+
+    if (taskError) {
+      console.error('Task search error:', taskError);
+      return NextResponse.json(
+        { error: 'Failed to search tasks', details: taskError.message },
+        { status: 500 }
+      );
+    }
+
+    if (!task) {
+      return NextResponse.json(
+        { 
+          error: 'Task code not found',
+          hint: 'Code must be part of a task UUID' 
+        },
+        { status: 404 }
+      );
+    }
+
+    // Step 2: Get the complete guest_id (UUID) from task
+    const guestId = task.user_id;
+
+    // Step 3: Check if link already exists
+    const { data: existingLink, error: checkError } = await supabase
       .from('user_links')
       .select('*')
-      .eq('phone', phone);
+      .eq('guest_id', guestId)
+      .maybeSingle();
 
-    if (error) {
+    if (checkError) {
+      console.error('Check existing link error:', checkError);
       return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 400 }
+        { error: 'Failed to check existing links', details: checkError.message },
+        { status: 500 }
       );
     }
 
-    console.log('GET /api/link - phone:', phone, 'data:', data);
-    return NextResponse.json({ success: true, data });
+    // Step 4: Update or insert user_links
+    if (existingLink) {
+      // Update existing link
+      const { error: updateError } = await supabase
+        .from('user_links')
+        .update({
+          phone,
+          updated_at: new Date().toISOString()
+        })
+        .eq('guest_id', guestId);
+
+      if (updateError) {
+        console.error('Update link error:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to update link', details: updateError.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Account link updated successfully',
+        data: {
+          phone,
+          guest_id: guestId,
+          task_id: task.id,
+          action: 'updated'
+        }
+      });
+    } else {
+      // Insert new link
+      const { error: insertError } = await supabase
+        .from('user_links')
+        .insert([
+          {
+            guest_id: guestId,
+            phone
+          }
+        ]);
+
+      if (insertError) {
+        console.error('Insert link error:', insertError);
+        
+        // Check if it's a duplicate key error
+        if (insertError.code === '23505') {
+          return NextResponse.json(
+            { 
+              error: 'Phone already linked to another account',
+              code: insertError.code
+            },
+            { status: 409 }
+          );
+        }
+
+        return NextResponse.json(
+          { error: 'Failed to create link', details: insertError.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Account linked successfully',
+        data: {
+          phone,
+          guest_id: guestId,
+          task_id: task.id,
+          action: 'created'
+        }
+      });
+    }
   } catch (error) {
-    console.error('GET /api/link error:', error);
+    console.error('Link POST error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to check link status' },
+      { error: 'Internal server error', details: String(error) },
       { status: 500 }
     );
   }
 }
 
-// POST - Create or update link
-export async function POST(request: NextRequest) {
+/**
+ * GET /api/link
+ * 
+ * Check if phone is already linked
+ * Query: ?phone=<WHATSAPP_NUMBER>
+ */
+export async function GET(request: NextRequest) {
   try {
-    const supabase = createServerClient();
-    const body = await request.json();
-
-    const phone = normalizePhone(body?.phone || '');
-    const code = String(body?.code || '').trim().toUpperCase();
+    const searchParams = request.nextUrl.searchParams;
+    const phone = searchParams.get('phone');
 
     if (!phone) {
       return NextResponse.json(
-        { success: false, error: 'phone is required' },
+        { error: 'phone query parameter is required' },
         { status: 400 }
       );
     }
 
-    if (!code || code.length < 4) {
-      return NextResponse.json(
-        { success: false, error: 'code is required' },
-        { status: 400 }
-      );
-    }
-
-    console.log('POST /api/link - phone:', phone, 'code:', code);
-
-    // 1) Procura guest_id que termina com o code na tabela user_links
-    const { data: found, error: findError } = await supabase
+    // Search for existing link
+    const { data: links, error } = await supabase
       .from('user_links')
-      .select('*')
-      .ilike('guest_id', `%${code}`)
-      .limit(1);
+      .select('guest_id, phone, is_active, created_at, updated_at')
+      .eq('phone', phone);
 
-    if (findError) {
+    if (error) {
+      console.error('Link GET error:', error);
       return NextResponse.json(
-        { success: false, error: findError.message },
-        { status: 400 }
+        { error: error.message },
+        { status: 500 }
       );
     }
 
-    let guestId: string;
-
-    // 2) Se não achou em user_links, procura em tasks (o user_id que contém o code)
-    if (!found || found.length === 0) {
-      console.log('Not found in user_links, searching in tasks...');
-      
-      const { data: tasksWithCode, error: taskFindError } = await supabase
+    // If link exists, fetch associated tasks
+    if (links && links.length > 0) {
+      const link = links[0];
+      const { data: tasks, error: tasksError } = await supabase
         .from('tasks')
-        .select('user_id')
-        .ilike('user_id', `%${code}%`)
-        .limit(1);
+        .select('id, title, is_completed, created_at')
+        .eq('user_id', link.guest_id)
+        .order('created_at', { ascending: false })
+        .limit(5);
 
-      if (taskFindError) {
-        return NextResponse.json(
-          { success: false, error: taskFindError.message },
-          { status: 400 }
-        );
+      if (tasksError) {
+        console.error('Tasks fetch error:', tasksError);
       }
 
-      if (!tasksWithCode || tasksWithCode.length === 0) {
-        // Se não achou em nenhum lugar, cria novo
-        const newGuestId = `guest-${code}`;
-
-        const { data: created, error: createError } = await supabase
-          .from('user_links')
-          .insert({ guest_id: newGuestId, phone })
-          .select()
-          .single();
-
-        if (createError) {
-          return NextResponse.json(
-            { success: false, error: createError.message },
-            { status: 400 }
-          );
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...link,
+          linked: true,
+          recent_tasks: tasks || []
         }
-
-        guestId = newGuestId;
-        console.log('Created new guest link:', newGuestId, 'for phone:', phone);
-        
-        return NextResponse.json(
-          { success: true, data: created, action: 'created' },
-          { status: 201 }
-        );
-      }
-
-      // Achou em tasks! Use esse user_id
-      guestId = tasksWithCode[0].user_id;
-      console.log('Found guest in tasks:', guestId);
-
-      // Criar entry em user_links
-      const { data: created, error: createError } = await supabase
-        .from('user_links')
-        .insert({ guest_id: guestId, phone })
-        .select()
-        .single();
-
-      if (createError) {
-        return NextResponse.json(
-          { success: false, error: createError.message },
-          { status: 400 }
-        );
-      }
-
-      console.log('Created user_link for existing guest:', guestId);
-      return NextResponse.json(
-        { success: true, data: created, action: 'created' },
-        { status: 201 }
-      );
+      });
     }
 
-    // 3) Se achou em user_links, atualizar o phone
-    const existingGuestId = found[0].guest_id as string;
-    const now = new Date().toISOString();
-
-    // Deletar antigos links desse phone
-    await supabase
-      .from('user_links')
-      .delete()
-      .eq('phone', phone)
-      .neq('guest_id', existingGuestId);
-
-    // Atualizar com o novo phone
-    const { data: linked, error: linkError } = await supabase
-      .from('user_links')
-      .update({ 
+    // No link found
+    return NextResponse.json({
+      success: true,
+      data: {
         phone,
-        updated_at: now 
-      })
-      .eq('guest_id', existingGuestId)
-      .select()
-      .single();
-
-    if (linkError) {
-      return NextResponse.json(
-        { success: false, error: linkError.message },
-        { status: 400 }
-      );
-    }
-
-    if (!linked) {
-      return NextResponse.json(
-        { success: false, error: 'Failed to link account' },
-        { status: 400 }
-      );
-    }
-
-    console.log('Updated user_link:', existingGuestId, 'to phone:', phone);
-    return NextResponse.json(
-      { success: true, data: linked, action: 'linked' },
-      { status: 200 }
-    );
+        linked: false,
+        message: 'Phone not linked yet. Send "link <CODE>" to link your account'
+      }
+    });
   } catch (error) {
-    console.error('POST /api/link error:', error);
+    console.error('Link GET error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to link account' },
+      { error: 'Internal server error', details: String(error) },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/link
+ * 
+ * Unlink a phone from user account
+ * Query: ?phone=<WHATSAPP_NUMBER> OR ?guest_id=<UUID>
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const phone = searchParams.get('phone');
+    const guestId = searchParams.get('guest_id');
+
+    if (!phone && !guestId) {
+      return NextResponse.json(
+        { error: 'Either phone or guest_id query parameter is required' },
+        { status: 400 }
+      );
+    }
+
+    let query = supabase.from('user_links').delete();
+
+    if (phone) {
+      query = query.eq('phone', phone);
+    } else if (guestId) {
+      query = query.eq('guest_id', guestId);
+    }
+
+    const { error } = await query;
+
+    if (error) {
+      console.error('Link DELETE error:', error);
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Link removed successfully'
+    });
+  } catch (error) {
+    console.error('Link DELETE error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error', details: String(error) },
       { status: 500 }
     );
   }
