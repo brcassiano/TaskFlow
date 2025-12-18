@@ -16,14 +16,12 @@ export default function Dashboard() {
   const [showLinkModal, setShowLinkModal] = useState<boolean>(false);
   const [showBanner, setShowBanner] = useState<boolean>(false);
 
-  // WhatsApp number
   const WHATSAPP_NUMBER = '5511984872770';
 
   useEffect(() => {
     initializeUser();
   }, [searchParams]);
 
-  // Show banner after creating first task
   useEffect(() => {
     if (!isLinked && taskCount > 0 && linkCode) {
       const bannerShown = localStorage.getItem('taskflow_banner_shown');
@@ -35,7 +33,6 @@ export default function Dashboard() {
 
   function initializeUser() {
     try {
-      // PRIORITY 1: URL parameter ?phone (from WhatsApp)
       const phoneParam = searchParams.get('phone');
       
       if (phoneParam) {
@@ -52,7 +49,6 @@ export default function Dashboard() {
         return;
       }
 
-      // PRIORITY 2: localStorage (returning user)
       const savedUserId = localStorage.getItem('taskflow_user_id');
       const savedLinked = localStorage.getItem('taskflow_linked') === 'true';
       
@@ -69,7 +65,6 @@ export default function Dashboard() {
         return;
       }
 
-      // PRIORITY 3: New user
       const guestId = `guest-${crypto.randomUUID()}`;
       const code = guestId.slice(-8);
       
@@ -125,7 +120,6 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         
-        {/* ==================== HEADER ==================== */}
         <header className="mb-8 text-center relative">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             📝 TaskFlow
@@ -134,7 +128,6 @@ export default function Dashboard() {
             Organize your tasks simply and efficiently
           </p>
 
-          {/* Link WhatsApp Button */}
           {!isLinked && linkCode && (
             <button
               onClick={() => setShowLinkModal(true)}
@@ -145,7 +138,6 @@ export default function Dashboard() {
             </button>
           )}
 
-          {/* Linked indicator */}
           {isLinked && userId.includes('@s.whatsapp.net') && (
             <div className="absolute top-0 right-0 flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-300 text-green-700 rounded-lg text-sm font-medium">
               <span className="text-lg">✅</span>
@@ -154,7 +146,6 @@ export default function Dashboard() {
           )}
         </header>
 
-        {/* ==================== BANNER: After first task ==================== */}
         {showBanner && !isLinked && linkCode && (
           <div className="mb-6 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-5 shadow-lg animate-slideDown">
             <button
@@ -195,7 +186,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ==================== MODAL: Link WhatsApp ==================== */}
         {showLinkModal && !isLinked && linkCode && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative animate-fadeIn">
@@ -249,7 +239,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ==================== FORM AND LIST ==================== */}
         <TaskForm 
           userId={userId} 
           onTaskCreated={handleTaskCreated} 
