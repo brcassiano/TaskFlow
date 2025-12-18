@@ -12,7 +12,12 @@ interface TaskListProps {
   onTasksLoaded: (count: number) => void;
 }
 
-export default function TaskList({ userId, refreshKey, onTaskUpdated, onTasksLoaded }: TaskListProps) {
+export default function TaskList({
+  userId,
+  refreshKey,
+  onTaskUpdated,
+  onTasksLoaded,
+}: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -21,13 +26,15 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated, onTasksLoa
   async function loadTasks() {
     setLoading(true);
     setError('');
-    
+
     try {
-      const res = await fetch(`/api/tasks?user_id=${encodeURIComponent(userId)}`);
+      const res = await fetch(
+        `/api/tasks?userId=${encodeURIComponent(userId)}`,
+      );
       const json = await res.json();
-      
+
       if (json.success) {
-        const tasksList = json.data || [];
+        const tasksList = json.data as Task[];
         setTasks(tasksList);
         onTasksLoaded(tasksList.length);
       } else {
@@ -47,44 +54,45 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated, onTasksLoa
     }
   }, [userId, refreshKey]);
 
-  // 🔥 Realtime subscription
+  // Realtime subscription
   useEffect(() => {
     if (!userId) return;
 
     const supabase = createBrowserClient();
 
-    console.log('🔔 Subscribing to realtime changes...');
-
+    console.log('Subscribing to realtime changes...');
     const channel = supabase
       .channel('tasks-changes')
       .on(
         'postgres_changes',
         {
-          event: '*', // INSERT, UPDATE, DELETE
+          event: '*',
           schema: 'public',
           table: 'tasks',
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          console.log('🔔 Realtime event:', payload);
+          console.log('Realtime event:', payload);
 
           if (payload.eventType === 'INSERT') {
-            setTasks(prev => [payload.new as Task, ...prev]);
+            setTasks((prev) => [payload.new as Task, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
-            setTasks(prev =>
-              prev.map(task =>
-                task.id === payload.new.id ? (payload.new as Task) : task
-              )
+            setTasks((prev) =>
+              prev.map((task) =>
+                task.id === payload.new.id ? (payload.new as Task) : task,
+              ),
             );
           } else if (payload.eventType === 'DELETE') {
-            setTasks(prev => prev.filter(task => task.id !== payload.old.id));
+            setTasks((prev) =>
+              prev.filter((task) => task.id !== payload.old.id),
+            );
           }
-        }
+        },
       )
       .subscribe();
 
     return () => {
-      console.log('🔕 Unsubscribing from realtime...');
+      console.log('Unsubscribing from realtime...');
       supabase.removeChannel(channel);
     };
   }, [userId]);
@@ -92,7 +100,7 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated, onTasksLoa
   if (loading) {
     return (
       <div className="text-center py-12">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
         <p className="mt-4 text-gray-600">Loading tasks...</p>
       </div>
     );
@@ -101,8 +109,8 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated, onTasksLoa
   if (error) {
     return (
       <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">
-        <p className="font-medium">❌ {error}</p>
-        <button 
+        <p className="font-medium">{error}</p>
+        <button
           onClick={loadTasks}
           className="mt-2 text-sm underline hover:no-underline"
         >
@@ -112,14 +120,14 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated, onTasksLoa
     );
   }
 
-  const filteredTasks = tasks.filter(task => {
+  const filteredTasks = tasks.filter((task) => {
     if (filter === 'pending') return !task.is_completed;
     if (filter === 'completed') return task.is_completed;
     return true;
   });
 
-  const pendingCount = tasks.filter(t => !t.is_completed).length;
-  const completedCount = tasks.filter(t => t.is_completed).length;
+  const pendingCount = tasks.filter((t) => !t.is_completed).length;
+  const completedCount = tasks.filter((t) => t.is_completed).length;
 
   return (
     <div>
@@ -166,22 +174,26 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated, onTasksLoa
       {filteredTasks.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg shadow-sm">
           <p className="text-4xl mb-4">
-            {filter === 'pending' && '🎉'}
-            {filter === 'completed' && '📝'}
-            {filter === 'all' && '📭'}
+            {filter === 'pending'
+              ? '🎉'
+              : filter === 'completed'
+                ? '📋'
+                : '✨'}
           </p>
           <p className="text-gray-600">
-            {filter === 'pending' && 'Congratulations! No pending tasks.'}
-            {filter === 'completed' && 'No completed tasks yet.'}
-            {filter === 'all' && 'No tasks yet. Create your first one!'}
+            {filter === 'pending'
+              ? 'Congratulations! No pending tasks.'
+              : filter === 'completed'
+                ? 'No completed tasks yet.'
+                : 'No tasks yet. Create your first one!'}
           </p>
         </div>
       ) : (
         <div>
-          {filteredTasks.map(task => (
-            <TaskItem 
-              key={task.id} 
-              task={task} 
+          {filteredTasks.map((task) => (
+            <TaskItem
+              key={task.id}
+              task={task}
               onUpdate={onTaskUpdated}
               onDelete={onTaskUpdated}
             />
