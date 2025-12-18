@@ -131,7 +131,6 @@ export default function TaskForm({ userId, onTaskCreated }: TaskFormProps) {
           className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none resize-none"
           rows={3}
           disabled={loading}
-          autoFocus
         />
       )}
       

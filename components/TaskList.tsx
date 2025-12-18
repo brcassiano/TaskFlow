@@ -9,9 +9,10 @@ interface TaskListProps {
   userId: string;
   refreshKey: number;
   onTaskUpdated: () => void;
+  onTasksLoaded: (count: number) => void;
 }
 
-export default function TaskList({ userId, refreshKey, onTaskUpdated }: TaskListProps) {
+export default function TaskList({ userId, refreshKey, onTaskUpdated, onTasksLoaded }: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,11 +23,13 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated }: TaskList
     setError('');
     
     try {
-      const res = await fetch(`/api/tasks?user_id=${userId}`);
+      const res = await fetch(`/api/tasks?user_id=${encodeURIComponent(userId)}`);
       const json = await res.json();
       
       if (json.success) {
-        setTasks(json.data || []);
+        const tasksList = json.data || [];
+        setTasks(tasksList);
+        onTasksLoaded(tasksList.length);
       } else {
         setError(json.error || 'Failed to load tasks');
       }
@@ -39,11 +42,15 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated }: TaskList
   }
 
   useEffect(() => {
-    loadTasks();
+    if (userId) {
+      loadTasks();
+    }
   }, [userId, refreshKey]);
 
-  // 🔥 NOVO: Realtime subscription
+  // 🔥 Realtime subscription
   useEffect(() => {
+    if (!userId) return;
+
     const supabase = createBrowserClient();
 
     console.log('🔔 Subscribing to realtime changes...');
@@ -62,24 +69,20 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated }: TaskList
           console.log('🔔 Realtime event:', payload);
 
           if (payload.eventType === 'INSERT') {
-            // Nova tarefa criada
             setTasks(prev => [payload.new as Task, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
-            // Tarefa atualizada
             setTasks(prev =>
               prev.map(task =>
                 task.id === payload.new.id ? (payload.new as Task) : task
               )
             );
           } else if (payload.eventType === 'DELETE') {
-            // Tarefa deletada
             setTasks(prev => prev.filter(task => task.id !== payload.old.id));
           }
         }
       )
       .subscribe();
 
-    // Cleanup ao desmontar componente
     return () => {
       console.log('🔕 Unsubscribing from realtime...');
       supabase.removeChannel(channel);
@@ -120,25 +123,10 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated }: TaskList
 
   return (
     <div>
-      {/* Statistics */}
+      {/* Statistics - Unified with filters */}
       <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex gap-6">
-            <div>
-              <p className="text-2xl font-bold text-blue-600">{pendingCount}</p>
-              <p className="text-sm text-gray-600">Pending</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-green-600">{completedCount}</p>
-              <p className="text-sm text-gray-600">Completed</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-600">{tasks.length}</p>
-              <p className="text-sm text-gray-600">Total</p>
-            </div>
-          </div>
-          
-          {/* Filters */}
+        <div className="flex items-center gap-3">
+          {/* Filters with counters - Left side only */}
           <div className="flex gap-2">
             <button
               onClick={() => setFilter('all')}
@@ -148,7 +136,7 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated }: TaskList
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              📋 All
+              All {tasks.length}
             </button>
             <button
               onClick={() => setFilter('pending')}
@@ -158,7 +146,7 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated }: TaskList
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              ⏳ Pending
+              Pending {pendingCount}
             </button>
             <button
               onClick={() => setFilter('completed')}
@@ -168,7 +156,7 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated }: TaskList
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              ✓ Completed
+              Completed {completedCount}
             </button>
           </div>
         </div>
