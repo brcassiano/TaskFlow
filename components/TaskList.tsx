@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase';
+import { createBrowserClient } from '@/lib/supabase';
 import TaskItem from './TaskItem';
 import type { Task } from '@/types';
 
@@ -44,7 +44,7 @@ export default function TaskList({ userId, refreshKey, onTaskUpdated }: TaskList
 
   // 🔥 NOVO: Realtime subscription
   useEffect(() => {
-    const supabase = createClient();
+    const supabase = createBrowserClient();
 
     console.log('🔔 Subscribing to realtime changes...');
 

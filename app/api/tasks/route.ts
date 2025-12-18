@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase';
-import type { Task } from '@/types';
+import { createServerClient } from '@/lib/supabase';
 
-// GET /api/tasks?user_id=xxx
-export async function GET(req: NextRequest) {
+// GET - List tasks
+export async function GET(request: NextRequest) {
   try {
-    const userId = req.nextUrl.searchParams.get('user_id');
-    
+    const supabase = createServerClient();
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('user_id');
+
     if (!userId) {
       return NextResponse.json(
         { success: false, error: 'user_id is required' },
@@ -14,64 +15,51 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const supabase = createAdminClient();
-    
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json({
-      success: true,
-      data: data as Task[],
-    });
-  } catch (error: any) {
-    console.error('GET /api/tasks error:', error);
+    return NextResponse.json({ success: true, data });
+  } catch (error) {
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: 'Failed to fetch tasks' },
       { status: 500 }
     );
   }
 }
 
-// POST /api/tasks
-export async function POST(req: NextRequest) {
+// POST - Create task
+export async function POST(request: NextRequest) {
   try {
-    const body = await req.json();
-    const { user_id, title, description } = body;
+    const supabase = createServerClient();
+    const body = await request.json();
 
-    if (!user_id || !title) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([body])
+      .select()
+      .single();
+
+    if (error) {
       return NextResponse.json(
-        { success: false, error: 'user_id and title are required' },
+        { success: false, error: error.message },
         { status: 400 }
       );
     }
 
-    const supabase = createAdminClient();
-
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert({
-        user_id,
-        title: title.trim(),
-        description: description?.trim() || null,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
+    return NextResponse.json({ success: true, data }, { status: 201 });
+  } catch (error) {
     return NextResponse.json(
-      { success: true, data: data as Task },
-      { status: 201 }
-    );
-  } catch (error: any) {
-    console.error('POST /api/tasks error:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: 'Failed to create task' },
       { status: 500 }
     );
   }
