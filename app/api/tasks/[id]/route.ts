@@ -1,55 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
-// PATCH - Update task
+// PATCH /api/tasks/[id]
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  params: Promise<{ id: string }>,
 ) {
   try {
-    const supabase = createServerClient();
     const { id } = await params;
     const body = await request.json();
 
-    console.log('PATCH /api/tasks/[id] - id:', id, 'body:', body);
+    console.log('PATCH /api/tasks/[id] - id, body:', id, body);
 
-    // Validar que tem user_id no body
-    if (!body.user_id) {
+    if (!body.userId) {
       return NextResponse.json(
-        { success: false, error: 'user_id is required' },
-        { status: 400 }
+        { success: false, error: 'userId is required' },
+        { status: 400 },
       );
     }
 
-    // Sanitizar body - só permitir certos campos
     const allowedFields = [
       'title',
       'description',
-      'is_completed',
-      'iscompleted',
-      'updated_at',
-    ];
-    const updateData: Record<string, any> = {};
+      'isCompleted',
+      'updatedAt',
+    ] as const;
 
+    const updateData: Record<string, any> = {};
     Object.keys(body).forEach((key) => {
-      if (allowedFields.includes(key)) {
+      if (allowedFields.includes(key as any)) {
         updateData[key] = body[key];
       }
     });
 
-    // Adicionar updated_at se não tiver
-    if (!updateData.updated_at) {
-      updateData.updated_at = new Date().toISOString();
+    if (!updateData.updatedAt) {
+      updateData.updatedAt = new Date().toISOString();
     }
 
-    console.log('PATCH /api/tasks/[id] - updateData:', updateData);
-
-    // Atualizar apenas se o user_id bater (validar ownership)
     const { data, error } = await supabase
       .from('tasks')
       .update(updateData)
       .eq('id', id)
-      .eq('user_id', body.user_id)
+      .eq('userId', body.userId)
       .select()
       .single();
 
@@ -57,15 +49,17 @@ export async function PATCH(
       console.error('PATCH /api/tasks/[id] - error:', error);
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!data) {
-      console.error('PATCH /api/tasks/[id] - Task not found or not authorized');
+      console.error(
+        'PATCH /api/tasks/[id] - Task not found or not authorized',
+      );
       return NextResponse.json(
         { success: false, error: 'Task not found or not authorized' },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -75,100 +69,96 @@ export async function PATCH(
     console.error('PATCH /api/tasks/[id] - exception:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to update task' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
-// DELETE - Delete task
+// DELETE /api/tasks/[id]
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  params: Promise<{ id: string }>,
 ) {
   try {
-    const supabase = createServerClient();
     const { id } = await params;
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('user_id');
+    const searchParams = new URL(request.url).searchParams;
+    const userId = searchParams.get('userId');
 
-    console.log('DELETE /api/tasks/[id] - id:', id, 'user_id:', userId);
+    console.log('DELETE /api/tasks/[id] - id, userId:', id, userId);
 
-    // Validar que tem user_id
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'user_id is required' },
-        { status: 400 }
+        { success: false, error: 'userId is required' },
+        { status: 400 },
       );
     }
 
-    // Deletar apenas se o user_id bater (validar ownership)
     const { error } = await supabase
       .from('tasks')
       .delete()
       .eq('id', id)
-      .eq('user_id', userId);
+      .eq('userId', userId);
 
     if (error) {
       console.error('DELETE /api/tasks/[id] - error:', error);
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     console.log('DELETE /api/tasks/[id] - success, deleted task:', id);
-    return NextResponse.json({ success: true, data: { id } });
+    return NextResponse.json({ success: true, data: id });
   } catch (error) {
     console.error('DELETE /api/tasks/[id] - exception:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to delete task' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
-// GET - Get single task
+// GET /api/tasks/[id]
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  params: Promise<{ id: string }>,
 ) {
   try {
-    const supabase = createServerClient();
     const { id } = await params;
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('user_id');
+    const searchParams = new URL(request.url).searchParams;
+    const userId = searchParams.get('userId');
 
-    console.log('GET /api/tasks/[id] - id:', id, 'user_id:', userId);
+    console.log('GET /api/tasks/[id] - id, userId:', id, userId);
 
-    // Validar que tem user_id
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'user_id is required' },
-        { status: 400 }
+        { success: false, error: 'userId is required' },
+        { status: 400 },
       );
     }
 
-    // Buscar apenas se o user_id bater (validar ownership)
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('id', id)
-      .eq('user_id', userId)
+      .eq('userId', userId)
       .single();
 
     if (error) {
       console.error('GET /api/tasks/[id] - error:', error);
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!data) {
-      console.error('GET /api/tasks/[id] - Task not found or not authorized');
+      console.error(
+        'GET /api/tasks/[id] - Task not found or not authorized',
+      );
       return NextResponse.json(
         { success: false, error: 'Task not found or not authorized' },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -178,7 +168,7 @@ export async function GET(
     console.error('GET /api/tasks/[id] - exception:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch task' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
