@@ -101,8 +101,8 @@ export default function DashboardClient() {
   }
 
   function getWhatsAppLink() {
-    const message = `link ${linkCode}`;
-    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+    const message = `#to-do-list link ${linkCode}`;
+    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`#to-do-list link ${linkCode}`)}`;
   }
 
   if (isLoading) {
