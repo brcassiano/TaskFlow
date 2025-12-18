@@ -20,7 +20,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Buscar se existe link para este telefone
     const { data, error } = await supabase
       .from('user_links')
       .select('*')
@@ -121,33 +120,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3) Se achou, faz o upsert normal (atualiza o phone)
-    const existingGuestId = found.guest_id as string;
+    // 3) Se achou, atualiza o phone (CORRIGIDO: sem constraint conflict)
+    const existingGuestId = found[0].guest_id as string;
     const now = new Date().toISOString();
 
-    // Limpa qualquer phone antigo conflitante
-    const { error: deleteError } = await supabase
+    // ✅ CORRIGIDO: Primeiro deletar antigos links desse phone
+    await supabase
       .from('user_links')
       .delete()
       .eq('phone', phone)
       .neq('guest_id', existingGuestId);
 
-    if (deleteError) {
-      console.error('Error cleaning old links:', deleteError);
-    }
-
+    // ✅ CORRIGIDO: Usar update ao invés de upsert para evitar constraint
     const { data: linked, error: linkError } = await supabase
       .from('user_links')
-      .upsert(
-        { guest_id: existingGuestId, phone, updated_at: now },
-        { onConflict: 'guest_id' }
-      )
+      .update({ 
+        phone,
+        updated_at: now 
+      })
+      .eq('guest_id', existingGuestId)
       .select()
       .single();
 
     if (linkError) {
       return NextResponse.json(
         { success: false, error: linkError.message },
+        { status: 400 }
+      );
+    }
+
+    if (!linked) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to link account' },
         { status: 400 }
       );
     }
