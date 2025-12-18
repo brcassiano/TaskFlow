@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// helper para extrair o id da URL /api/tasks/:id
 function getIdFromUrl(url: string): string | null {
   const u = new URL(url);
   const parts = u.pathname.split('/');
-  // ['', 'api', 'tasks', ':id']
   return parts[3] ?? null;
 }
 
@@ -23,27 +21,21 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     console.log('PATCH /api/tasks/[id] - id, body:', id, body);
 
-    if (!body.userId) {
+    if (!body.user_id) {
       return NextResponse.json(
-        { success: false, error: 'userId is required' },
+        { success: false, error: 'user_id is required' },
         { status: 400 },
       );
     }
 
-    const allowedFields = [
-      'title',
-      'description',
-      'is_completed',
-      'updated_at',
-    ] as const;
-
+    // Converter camelCase para snake_case
     const updateData: Record<string, any> = {};
-    Object.keys(body).forEach((key) => {
-      if (allowedFields.includes(key as any)) {
-        updateData[key] = body[key];
-      }
-    });
-
+    
+    if (body.title !== undefined) updateData.title = body.title;
+    if (body.description !== undefined) updateData.description = body.description;
+    if (body.is_completed !== undefined) updateData.is_completed = body.is_completed;
+    if (body.isCompleted !== undefined) updateData.is_completed = body.isCompleted; // camelCase fallback
+    
     if (!updateData.updated_at) {
       updateData.updated_at = new Date().toISOString();
     }
@@ -52,7 +44,7 @@ export async function PATCH(request: NextRequest) {
       .from('tasks')
       .update(updateData)
       .eq('id', id)
-      .eq('user_id', body.userId)
+      .eq('user_id', body.user_id)
       .select()
       .single();
 
