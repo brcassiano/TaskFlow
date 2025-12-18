@@ -1,15 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// PATCH /api/tasks/[id]
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
-  try {
-    const { id } = params;
-    const body = await request.json();
+// helper para extrair o id da URL /api/tasks/:id
+function getIdFromUrl(url: string): string | null {
+  const u = new URL(url);
+  const parts = u.pathname.split('/');
+  // ['', 'api', 'tasks', ':id']
+  return parts[3] ?? null;
+}
 
+// PATCH /api/tasks/[id]
+export async function PATCH(request: NextRequest) {
+  try {
+    const id = getIdFromUrl(request.url);
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'id is required in URL' },
+        { status: 400 },
+      );
+    }
+
+    const body = await request.json();
     console.log('PATCH /api/tasks/[id] - id, body:', id, body);
 
     if (!body.userId) {
@@ -75,12 +86,16 @@ export async function PATCH(
 }
 
 // DELETE /api/tasks/[id]
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function DELETE(request: NextRequest) {
   try {
-    const { id } = params;
+    const id = getIdFromUrl(request.url);
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'id is required in URL' },
+        { status: 400 },
+      );
+    }
+
     const searchParams = new URL(request.url).searchParams;
     const userId = searchParams.get('userId');
 
@@ -119,12 +134,16 @@ export async function DELETE(
 }
 
 // GET /api/tasks/[id]
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function GET(request: NextRequest) {
   try {
-    const { id } = params;
+    const id = getIdFromUrl(request.url);
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'id is required in URL' },
+        { status: 400 },
+      );
+    }
+
     const searchParams = new URL(request.url).searchParams;
     const userId = searchParams.get('userId');
 
