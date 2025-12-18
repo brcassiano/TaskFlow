@@ -28,9 +28,12 @@ export default function DashboardClient() {
 
   // Check link status no banco quando userId muda
   useEffect(() => {
+    console.log('useEffect: userId changed to:', userId);
     if (userId && !userId.startsWith('guest-')) {
-      // Se é phone (não guest), verifica se tem vínculo no banco
+      console.log('Calling checkLinkStatus for non-guest user');
       checkLinkStatus();
+    } else {
+      console.log('Skipping checkLinkStatus - userId is guest or empty');
     }
   }, [userId]);
 
@@ -43,30 +46,33 @@ export default function DashboardClient() {
 
   async function checkLinkStatus() {
     try {
-      console.log('Checking link status for phone:', userId);
+      console.log('checkLinkStatus: Checking link status for phone:', userId);
       const res = await fetch(`/api/link?phone=${userId}`);
       const data = await res.json();
-      console.log('Link status response:', data);
+      console.log('checkLinkStatus: Link status response:', data);
 
       const linked = data.data && Array.isArray(data.data) && data.data.length > 0;
-      console.log('Is linked:', linked);
+      console.log('checkLinkStatus: Is linked:', linked);
 
       setIsLinked(linked);
       localStorage.setItem('taskflow_linked', linked ? 'true' : 'false');
     } catch (err) {
-      console.error('Error checking link status:', err);
+      console.error('checkLinkStatus: Error checking link status:', err);
     }
   }
 
   function initializeUser() {
     try {
+      console.log('initializeUser: called');
       const phoneParam = searchParams.get('phone');
+      console.log('initializeUser: phoneParam:', phoneParam);
 
       if (phoneParam) {
         const formattedPhone = phoneParam.includes('@s.whatsapp.net')
           ? phoneParam
           : `${phoneParam}@s.whatsapp.net`;
 
+        console.log('initializeUser: Set userId to phone:', formattedPhone);
         localStorage.setItem('taskflow_user_id', formattedPhone);
         localStorage.setItem('taskflow_linked', 'true');
 
@@ -78,6 +84,7 @@ export default function DashboardClient() {
 
       const savedUserId = localStorage.getItem('taskflow_user_id');
       const savedLinked = localStorage.getItem('taskflow_linked') === 'true';
+      console.log('initializeUser: savedUserId:', savedUserId, 'savedLinked:', savedLinked);
 
       if (savedUserId) {
         setUserId(savedUserId);
@@ -95,6 +102,7 @@ export default function DashboardClient() {
       const guestId = `guest-${crypto.randomUUID()}`;
       const code = guestId.slice(-8);
 
+      console.log('initializeUser: Set userId to guest:', guestId);
       localStorage.setItem('taskflow_user_id', guestId);
       localStorage.setItem('taskflow_linked', 'false');
 
@@ -103,7 +111,7 @@ export default function DashboardClient() {
       setLinkCode(code.toUpperCase());
       setIsLoading(false);
     } catch (error) {
-      console.error('Error initializing user:', error);
+      console.error('initializeUser: Error initializing user:', error);
       setIsLoading(false);
     }
   }
