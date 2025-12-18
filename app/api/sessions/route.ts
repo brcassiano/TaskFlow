@@ -9,7 +9,7 @@ function normalizePhone(input?: string | null): string | null {
 
 function assertSecret(req: NextRequest) {
   const required = process.env.TASKFLOW_API_SECRET;
-  if (!required) return null; // sem secret configurado, não bloqueia
+  if (!required) return null;
 
   const got = req.headers.get('x-taskflow-secret');
   if (!got || got !== required) {

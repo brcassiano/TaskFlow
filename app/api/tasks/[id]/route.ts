@@ -33,8 +33,8 @@ export async function PATCH(request: NextRequest) {
     const allowedFields = [
       'title',
       'description',
-      'isCompleted',
-      'updatedAt',
+      'is_completed',
+      'updated_at',
     ] as const;
 
     const updateData: Record<string, any> = {};
@@ -44,15 +44,15 @@ export async function PATCH(request: NextRequest) {
       }
     });
 
-    if (!updateData.updatedAt) {
-      updateData.updatedAt = new Date().toISOString();
+    if (!updateData.updated_at) {
+      updateData.updated_at = new Date().toISOString();
     }
 
     const { data, error } = await supabase
       .from('tasks')
       .update(updateData)
       .eq('id', id)
-      .eq('userId', body.userId)
+      .eq('user_id', body.userId)
       .select()
       .single();
 
@@ -112,7 +112,7 @@ export async function DELETE(request: NextRequest) {
       .from('tasks')
       .delete()
       .eq('id', id)
-      .eq('userId', userId);
+      .eq('user_id', userId);
 
     if (error) {
       console.error('DELETE /api/tasks/[id] - error:', error);
@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
       .from('tasks')
       .select('*')
       .eq('id', id)
-      .eq('userId', userId)
+      .eq('user_id', userId)
       .single();
 
     if (error) {

@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('userId', userId)
-      .order('createdAt', { ascending: false });
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       return NextResponse.json(

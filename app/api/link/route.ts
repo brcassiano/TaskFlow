@@ -14,10 +14,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 1: find task by code (partial UUID match)
+    // Step 1: Find task by code (partial UUID match)
     const { data: task, error: taskError } = await supabase
       .from('tasks')
-      .select('id, userId, title')
+      .select('id, user_id, title')
       .ilike('id', `%${code}%`)
       .maybeSingle();
 
@@ -39,8 +39,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const guestId = task.userId;
+    // Step 2: Get guestId from task
+    const guestId = task.user_id;
 
+    // Step 3: Check if link already exists
     const {
       data: existingLink,
       error: checkError,
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Step 4: Update or insert userLinks
     if (existingLink) {
       const { error: updateError } = await supabase
         .from('userLinks')
@@ -163,9 +166,9 @@ export async function GET(request: NextRequest) {
         error: tasksError,
       } = await supabase
         .from('tasks')
-        .select('id, title, isCompleted, createdAt')
-        .eq('userId', link.guestId)
-        .order('createdAt', { ascending: false })
+        .select('id, title, is_completed, created_at')
+        .eq('user_id', link.guestId)
+        .order('created_at', { ascending: false })
         .limit(5);
 
       if (tasksError) {
