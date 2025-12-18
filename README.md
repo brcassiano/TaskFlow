@@ -135,24 +135,39 @@ sequenceDiagram
 taskflow/
 ├── app/
 │   ├── api/
-│   │   ├── tasks/
-│   │   │   ├── route.ts
-│   │   │   └── [id]/
-│   │   │       └── route.ts
+│   │   └── tasks/
+│   │       ├── route.ts
+│   │       └── [id]/
+│   │           └── route.ts
 │   ├── dashboard/
 │   │   └── page.tsx
+│   ├── globals.css
 │   ├── layout.tsx
 │   └── page.tsx
 ├── components/
+│   ├── ConfirmModal.tsx
+│   ├── DashboardContent.tsx
 │   ├── TaskForm.tsx
-│   ├── TaskList.tsx
 │   ├── TaskItem.tsx
-│   └── ConfirmModal.tsx
+│   └── TaskList.tsx
 ├── lib/
+│   ├── ai.ts
+│   ├── schemas.ts
 │   └── supabase.ts
+├── supabase/
+│   └── schema.sql
 ├── types.ts
 ├── .env.example
-└── package.json
+├── .env.local
+├── .gitignore
+├── next-env.d.ts
+├── next.config.js
+├── package-lock.json
+├── package.json
+├── postcss.config.js
+├── README.md
+├── tailwind.config.ts
+├── tsconfig.json
 ```
 
 ## 🚀 Getting Started
