@@ -1,5 +1,124 @@
+# ============================================
+# 🔒 CREDENCIAIS E SECRETS
+# ============================================
+.env
+.env.local
+.env*.local
+.env.development
+.env.test
+.env.production
+!.env.example
+
+# Arquivos de config sensíveis
+config.json
+secrets.json
+credentials.json
+*-credentials.json
+*.pem
+*.key
+*.cert
+*.p12
+
+# ============================================
+# 📦 DEPENDÊNCIAS
+# ============================================
 node_modules/
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# ============================================
+# 🔨 NEXT.JS
+# ============================================
 .next/
-.env*
-.DS_Store
+out/
+build/
+dist/
+
+# Next.js cache
+.next/cache/
+
+# ============================================
+# 📊 LOGS E DEBUG
+# ============================================
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ============================================
+# 🧪 TESTES
+# ============================================
+coverage/
+.nyc_output/
+*.lcov
+
+# ============================================
+# 💻 SISTEMA OPERACIONAL
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================
+# 🛠️ IDEs
+# ============================================
+# VSCode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+
+# ============================================
+# 🗂️ TYPESCRIPT
+# ============================================
+*.tsbuildinfo
+next-env.d.ts
+
+# ============================================
+# ☁️ VERCEL
+# ============================================
+.vercel
+.vercel.json
+
+# ============================================
+# 🐳 DOCKER
+# ============================================
+docker-compose.override.yml
+
+# ============================================
+# 🗄️ DATABASES
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ============================================
+# 🔧 BACKUP E TEMP
+# ============================================
+*.tmp
+*.temp
+*.bak
+*.backup
+*.swp
+*~
+.cache/
