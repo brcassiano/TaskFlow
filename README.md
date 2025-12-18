@@ -30,26 +30,26 @@ A modern, real-time task management application built with Next.js 15, Supabase,
 
 ### High-Level Overview
 
-```
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#bbdefb','primaryTextColor':'#000','primaryBorderColor':'#1976d2','lineColor':'#555','secondaryColor':'#ffe0b2','tertiaryColor':'#f8bbd0','clusterBkg':'#bbdefb','clusterBorder':'#1976d2','titleColor':'#000','edgeLabelBackground':'#fff'}}}%%
 graph TB
-    subgraph USERS["👥 Users"]
+    subgraph USERS["Users"]
         WB["Web Browser"]
         WA["WhatsApp"]
     end
 
-    subgraph EDGE["⚡ Edge Layer"]
+    subgraph EDGE["Edge Layer"]
         FE["Next.js Frontend<br/>(Vercel)"]
         EVO["Evolution API<br/>(WhatsApp Gateway)"]
         N8N["n8n Engine<br/>(Automation)"]
     end
 
-    subgraph API["🔌 API Layer (Vercel)"]
+    subgraph API["API Layer"]
         TASKS["/api/tasks<br/>GET, POST"]
         TASKID["/api/tasks/:id<br/>PATCH, DELETE"]
-        WEBHOOK["/api/webhook<br/>POST"]
     end
 
-    subgraph DATA["💾 Data Layer"]
+    subgraph DATA["Data Layer"]
         DB["PostgreSQL<br/>profiles, tasks"]
         RT["Realtime Engine<br/>WebSockets"]
     end
@@ -60,40 +60,51 @@ graph TB
 
     WA --> EVO
     EVO --> N8N
-    N8N --> WEBHOOK
+    N8N --> TASKS
 
     TASKS --> DB
     TASKID --> DB
-    WEBHOOK --> DB
+    N8N --> TASKID
 
     DB --> RT
     RT -.->|broadcasts| FE
     RT -.->|broadcasts| WB
 
-    style USERS fill:#e1f5ff
-    style EDGE fill:#fff4e1
-    style API fill:#ffe1f5
-    style DATA fill:#e1ffe1
+    style USERS fill:#bbdefb,stroke:#1976d2,stroke-width:3px
+    style EDGE fill:#ffe0b2,stroke:#f57c00,stroke-width:3px
+    style API fill:#f8bbd0,stroke:#c2185b,stroke-width:3px
+    style DATA fill:#c8e6c9,stroke:#388e3c,stroke-width:3px
+    
+    style WB fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#000
+    style WA fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#000
+    style FE fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#000
+    style EVO fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#000
+    style N8N fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#000
+    style TASKS fill:#fce4ec,stroke:#ad1457,stroke-width:2px,color:#000
+    style TASKID fill:#fce4ec,stroke:#ad1457,stroke-width:2px,color:#000
+    style DB fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style RT fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
 ```
 
 ### Data Flow Logic
 
 #### 🔄 Real-time Sync Flow
 
-```
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#fff','primaryTextColor':'#000','primaryBorderColor':'#000','lineColor':'#000','secondaryColor':'#fff','tertiaryColor':'#fff','noteTextColor':'#000','noteBkgColor':'#fff','noteBorderColor':'#000'}}}%%
 sequenceDiagram
     autonumber
-    participant WEB as 💻 Browser A
+    participant WEB as Browser A
     participant API as Next.js API
     participant DB as Supabase DB
-    participant RT as Realtime Engine
-    participant WEB2 as 💻 Browser B
-    participant WA as 📱 WhatsApp
+    participant RT as Realtime
+    participant WEB2 as Browser B
+    participant WA as WhatsApp User
     participant EVO as Evolution API
     participant N8N as n8n
     
-    rect rgb(240, 248, 255)
-        Note over WEB,WEB2: Scenario 1: User creates task via Web UI
+    rect rgb(187, 222, 251)
+        Note over WEB,WEB2: Scenario 1: Create task via Web UI
         WEB->>API: POST /api/tasks
         API->>DB: INSERT INTO tasks
         DB->>RT: Change event (CDC)
@@ -102,16 +113,19 @@ sequenceDiagram
         Note over WEB,WEB2: Both browsers update instantly
     end
 
-    rect rgb(240, 255, 240)
-        Note over WA,WEB2: Scenario 2: User creates task via WhatsApp
-        WA->>EVO: "/task add Buy milk"
+    rect rgb(200, 230, 201)
+        Note over WA,WEB2: Scenario 2: Create task via WhatsApp
+        WA->>EVO: /task add Buy milk
         EVO->>N8N: Webhook trigger
-        N8N->>API: POST /api/webhook (x-webhook-secret)
+        N8N->>API: POST /api/tasks
         API->>DB: INSERT INTO tasks
+        API-->>N8N: Success response (task created)
         DB->>RT: Change event (CDC)
         RT-->>WEB: WebSocket broadcast
         RT-->>WEB2: WebSocket broadcast
-        N8N-->>WA: ✅ Task created
+        N8N->>EVO: Format & send message
+        EVO->>WA: ✅ Task created: Buy milk
+        Note over WA: User receives confirmation
     end
 ```
 
@@ -125,8 +139,6 @@ taskflow/
 │   │   │   ├── route.ts
 │   │   │   └── [id]/
 │   │   │       └── route.ts
-│   │   └── webhook/
-│   │       └── route.ts
 │   ├── dashboard/
 │   │   └── page.tsx
 │   ├── layout.tsx
@@ -142,22 +154,19 @@ taskflow/
 ├── .env.example
 └── package.json
 ```
-```
 
 ## 🚀 Getting Started
 
 ### 1. Clone Repository
-
+```bash
 git clone https://github.com/yourusername/taskflow.git
 cd taskflow
 npm install
-
-text
-
+```
 ### 2. Supabase Setup
 
 Run the following SQL in your Supabase **SQL Editor**:
-
+```sql
 -- 1. Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -193,21 +202,23 @@ RETURN NEW;
 END;
 
 -- 6. Trigger
+```sql
 CREATE TRIGGER tasks_updated_at
 BEFORE UPDATE ON tasks
 FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- 7. Enable Realtime
+```sql
 ALTER TABLE tasks REPLICA IDENTITY FULL;
 ALTER PUBLICATION supabase_realtime ADD TABLE tasks;
 
 -- 8. Create Demo User
+
 INSERT INTO profiles (email, name)
 VALUES ('demo@taskflow.com', 'Demo User')
 ON CONFLICT (email) DO NOTHING
 RETURNING id, email;
-
-text
+```
 
 > **⚠️ Important:** Copy the `id` (UUID) returned from step 8! You'll need it below.
 
@@ -216,93 +227,214 @@ text
 Create `.env.local` in your project root:
 
 Supabase Configuration
+```bash
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5...
-
-App Security
-WEBHOOK_SECRET=your_secure_random_string_32_chars
+```
 
 ### 4. Configuration
 
 Update `app/dashboard/page.tsx`:
-
+```bash
 const USER_ID = 'paste-your-uuid-here';
-
+```
 ### 5. Run
-
+```bash
 npm run dev
+```
+## 📡 REST API Documentation
 
-## 📡 API Documentation
+### Endpoints
 
-### Webhook Endpoint
-Target URL for N8N or other services.
+#### GET /api/tasks
+List all tasks for a user
 
-- **URL:** `/api/webhook`
-- **Method:** `POST`
-- **Headers:** `x-webhook-secret: <your_secret>`
+**Query Parameters:**
+- `user_id` (required): UUID of the user
 
-| Action | JSON Payload Example | Description |
-| :--- | :--- | :--- |
-| **Create** | `{ "action": "create", "user_email": "demo@taskflow.com", "task_title": "Buy milk" }` | Creates a new task |
-| **List** | `{ "action": "list", "user_email": "demo@taskflow.com" }` | Returns array of tasks |
-| **Complete** | `{ "action": "complete", "user_email": "demo@taskflow.com", "task_id": "uuid..." }` | Marks task as done |
-| **Delete** | `{ "action": "delete", "user_email": "demo@taskflow.com", "task_id": "uuid..." }` | Removes task |
+**Example:**
+```
+curl "https://your-app.vercel.app/api/tasks?user_id=YOUR_USER_ID"
+```
+**Response:**
+```
+{
+"success": true,
+"data": [
+{
+"id": "uuid",
+"user_id": "uuid",
+"title": "Task title",
+"description": "Optional description",
+"is_completed": false,
+"created_at": "2025-12-17T...",
+"updated_at": "2025-12-17T..."
+}
+]
+}
+```
+#### POST /api/tasks
+Create a new task
 
+**Body:**
+```
+{
+"user_id": "uuid",
+"title": "Task title",
+"description": "Optional description"
+}
+```
+**Example:**
+```
+curl -X POST https://your-app.vercel.app/api/tasks
+-H "Content-Type: application/json"
+-d '{"user_id":"YOUR_USER_ID","title":"Buy milk"}'
+```
+#### PATCH /api/tasks/:id
+Update a task (mark as completed, change title, etc)
 
+**Body:**
+```
+{
+"is_completed": true,
+"title": "Updated title"
+}
+```
+**Example:**
+```
+curl -X PATCH https://your-app.vercel.app/api/tasks/TASK_ID
+-H "Content-Type: application/json"
+-d '{"is_completed":true}'
+```
+#### DELETE /api/tasks/:id
+Delete a task permanently
+
+**Example:**
+```
+curl -X DELETE https://your-app.vercel.app/api/tasks/TASK_ID
+```
 ## 🤖 N8N Integration Guide
 
 ### Workflow Logic
 `[Webhook] → [Parse Command] → [Call TaskFlow API] → [Format Response] → [Send WhatsApp]`
 
-### N8N Code Node (Parse Command)
-Use this JavaScript snippet in your N8N Function node to parse incoming WhatsApp messages:
-
+### Node 2: Function (Parse Command)
+```markdown
+// Parse WhatsApp message
 const message = $input.item.json.body.message || '';
 const phone = $input.item.json.body.from || '';
-const parts = message.trim().split(' ');
+const senderName = $input.item.json.body.senderName || 'User';
 
-// Get commands safely
-const command = parts?.toLowerCase();
+// Parse: /task <action> <text>
+const parts = message.trim().split(' ');
+const command = parts?.toLowerCase();​
 const taskText = parts.slice(2).join(' ');
 
-let action = '';
-let payload = { user_email: 'demo@taskflow.com' };
+// Your user ID (in production, map phone → user)
+const userId = 'YOUR_USER_ID_HERE'; // Replace with your UUID
 
-if (command === '/task') {
-const subCommand = parts?.toLowerCase();
+return {
+command, // add, list, done, delete
+taskText, // task title or task ID
+userId,
+phone,
+senderName
+};
+```
+### Node 3: Switch (Route by Command)
+```markdown
+Configure a Switch node with these rules:
 
-text
-if (subCommand === 'add') {
-    action = 'create';
-    payload.task_title = taskText;
-} else if (subCommand === 'list') {
-    action = 'list';
-} else if (subCommand === 'done') {
-    action = 'complete';
-    payload.task_id = parts;
-} else if (subCommand === 'delete') {
-    action = 'delete';
-    payload.task_id = parts;
+Rule	Condition	Output
+0	{{ $json.command }} equals add	Create Task
+1	{{ $json.command }} equals list	List Tasks
+2	{{ $json.command }} equals done	Complete Task
+3	{{ $json.command }} equals delete	Delete Task
+Fallback	(default)	Help Message
+```
+
+Node 4a: HTTP Request (Create Task)
+Method: POST
+```
+URL: https://your-app.vercel.app/api/tasks
+
+Body:
+
+{
+  "user_id": "={{ $json.userId }}",
+  "title": "={{ $json.taskText }}"
+}
+```
+Node 4b: HTTP Request (List Tasks)
+Method: GET
+```
+URL: https://your-app.vercel.app/api/tasks?user_id={{ $json.userId }}
+```
+Node 4c: HTTP Request (Complete Task)
+Method: PATCH
+```
+URL: https://your-app.vercel.app/api/tasks/{{ $json.taskText }}
+
+Body:
+{
+  "is_completed": true
+}
+```
+Node 4d: HTTP Request (Delete Task)
+Method: DELETE
+```
+URL: https://your-app.vercel.app/api/tasks/{{ $json.taskText }}
+```
+
+Node 5: Function (Format Response)
+```
+const response = $input.item.json;
+const phone = $input.first().json.phone;
+const command = $input.first().json.command;
+
+let message = '';
+
+if (!command || command === 'help') {
+  message = `*TaskFlow Commands:*\n\n`;
+  message += `📝 /task add [title] - Create\n`;
+  message += `📋 /task list - View all\n`;
+  message += `✅ /task done [id] - Complete\n`;
+  message += `🗑️ /task delete [id] - Delete`;
+} else if (command === 'list' && response.success) {
+  const tasks = response.data || [];
+  message = `📋 *Tasks (${tasks.length})*\n\n`;
+  tasks.forEach((t, i) => {
+    message += `${i+1}. ${t.is_completed ? '✅' : '⏳'} ${t.title}\n`;
+    message += `   ID: ${t.id.substring(0, 8)}\n\n`;
+  });
+} else if (command === 'add' && response.success) {
+  message = `✅ *Task Created!*\n\n${response.data.title}`;
+} else if (response.success) {
+  message = `✅ ${command === 'done' ? 'Task completed!' : 'Task deleted!'}`;
 } else {
-    action = 'help';
-}
+  message = `❌ Error: ${response.error}`;
 }
 
-return { action, payload, phone };
+return { phone, message };
+```
+Node 6: HTTP Request (Send WhatsApp)
+Method: POST
+```
+URL: https://evolution.yourdomain.com/message/sendText/YOUR_INSTANCE
 
+Body:
+{
+  "number": "={{ $json.phone }}",
+  "text": "={{ $json.message }}"
+}
+```
 ### WhatsApp Commands
 
-/task add Buy coffee # Create task
-/task list # List all tasks
-/task done [task_id] # Mark as completed
-/task delete [task_id] # Delete task
+Activate it on WhatsApp with the command:
+#to-do-list
 
-## 🔐 Security Best Practices
-
-1.  **Environment Variables:** Never commit `.env.local` or `.env` to GitHub.
-2.  **Service Role:** The `SUPABASE_SERVICE_ROLE_KEY` bypasses Row Level Security. Use it only on the server-side (API Routes).
-3.  **Webhook Secret:** Ensure your `WEBHOOK_SECRET` is at least 32 characters long and random.
+Once you activate it, you can interact in natural language chat the AI to create, delete or mark as completed, or rather choose the options numbers.
 
 ## 📄 License
 
