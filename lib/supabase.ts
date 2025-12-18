@@ -5,13 +5,16 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 // Client para uso no servidor (API Routes)
-export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+export const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     persistSession: false,
   },
 });
 
-// Client para uso no servidor (Server Functions)
+// Client para uso no cliente (Components, Pages)
+export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+
+// Funções auxiliares para compatibilidade
 export function createServerClient() {
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
@@ -20,7 +23,6 @@ export function createServerClient() {
   });
 }
 
-// Client para uso no cliente (Components, Pages)
 export function createBrowserClient() {
   return createClient(supabaseUrl, supabaseAnonKey);
 }
