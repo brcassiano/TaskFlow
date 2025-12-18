@@ -3,38 +3,9 @@ import { createServerClient } from '@/lib/supabase';
 
 function normalizePhone(input: string) {
   const p = String(input || '').trim();
-  if (!p) return '';
-  return p.includes('@s.whatsapp.net') ? p : `${p}@s.whatsapp.net`;
+  return p;
 }
 
-// GET /api/link?phone=...  -> retorna [] ou [..]
-export async function GET(request: NextRequest) {
-  try {
-    const supabase = createServerClient();
-    const { searchParams } = new URL(request.url);
-    const phone = normalizePhone(searchParams.get('phone') || '');
-
-    if (!phone) {
-      return NextResponse.json({ success: false, error: 'phone is required' }, { status: 400 });
-    }
-
-    const { data, error } = await supabase
-      .from('user_links')
-      .select('id, guest_id, phone')
-      .eq('phone', phone)
-      .limit(1);
-
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-    }
-
-    return NextResponse.json({ success: true, data }); // [] = não vinculado; [..] = vinculado
-  } catch {
-    return NextResponse.json({ success: false, error: 'Failed to check link' }, { status: 500 });
-  }
-}
-
-// POST /api/link  body: { phone: "...", code: "XXXXXXXX" }
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient();
@@ -46,11 +17,11 @@ export async function POST(request: NextRequest) {
     if (!phone) {
       return NextResponse.json({ success: false, error: 'phone is required' }, { status: 400 });
     }
-    if (!code) {
+    if (!code || code.length < 4) {
       return NextResponse.json({ success: false, error: 'code is required' }, { status: 400 });
     }
 
-    // 1) Achar o guest_id que termina com o code
+    // 1) Procura guest_id que termina com o code
     const { data: found, error: findError } = await supabase
       .from('user_links')
       .select('*')
@@ -60,20 +31,41 @@ export async function POST(request: NextRequest) {
     if (findError) {
       return NextResponse.json({ success: false, error: findError.message }, { status: 400 });
     }
+
+    let guestId: string;
+
+    // 2) Se não achou, cria uma nova entry com guest_id = guest-{code}
     if (!found || found.length === 0) {
-      return NextResponse.json({ success: false, error: 'Invalid code' }, { status: 404 });
+      const newGuestId = `guest-${code}`;
+      
+      const { data: created, error: createError } = await supabase
+        .from('user_links')
+        .insert({ guest_id: newGuestId, phone })
+        .select()
+        .single();
+
+      if (createError) {
+        return NextResponse.json({ success: false, error: createError.message }, { status: 400 });
+      }
+
+      guestId = newGuestId;
+      
+      // Migrar tasks do guest para o phone
+      await supabase.from('tasks').update({ user_id: phone }).eq('user_id', newGuestId);
+
+      return NextResponse.json({ success: true, data: created, action: 'created' });
     }
 
-    const guestId = found[0].guest_id as string;
+    // 3) Se achou, faz o upsert normal (atualiza o phone)
+    const existingGuestId = found[0].guest_id as string;
     const now = new Date().toISOString();
 
-    // 2) Evita conflito do UNIQUE(phone): remove qualquer linha antiga desse phone (se existir)
-    await supabase.from('user_links').delete().eq('phone', phone).neq('guest_id', guestId);
+    // Limpa qualquer phone antigo conflitante
+    await supabase.from('user_links').delete().eq('phone', phone).neq('guest_id', existingGuestId);
 
-    // 3) Upsert pelo guest_id (UNIQUE guest_id)
     const { data: linked, error: linkError } = await supabase
       .from('user_links')
-      .upsert({ guest_id: guestId, phone, updated_at: now }, { onConflict: 'guest_id' })
+      .upsert({ guest_id: existingGuestId, phone, updated_at: now }, { onConflict: 'guest_id' })
       .select()
       .single();
 
@@ -81,17 +73,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: linkError.message }, { status: 400 });
     }
 
-    // 4) (Opcional) Migrar tasks guest -> phone (mantenha se tasks.user_id for text e compatível)
-    const { error: migrateError } = await supabase
-      .from('tasks')
-      .update({ user_id: phone })
-      .eq('user_id', guestId);
+    // Migrar tasks
+    await supabase.from('tasks').update({ user_id: phone }).eq('user_id', existingGuestId);
 
-    if (migrateError) {
-      return NextResponse.json({ success: true, data: linked, warning: migrateError.message });
-    }
-
-    return NextResponse.json({ success: true, data: linked });
+    return NextResponse.json({ success: true, data: linked, action: 'linked' });
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to link account' }, { status: 500 });
   }
