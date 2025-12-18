@@ -1,43 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
+import { createServerClient } from '@/lib/supabase-server';
 
-// GET - List tasks
+// GET /api/tasks?userId=...
 export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient();
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('user_id');
+    const searchParams = new URL(request.url).searchParams;
+    const userId = searchParams.get('userId');
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'user_id is required' },
-        { status: 400 }
+        { success: false, error: 'userId is required' },
+        { status: 400 },
       );
     }
 
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .eq('userId', userId)
+      .order('createdAt', { ascending: false });
 
     if (error) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     return NextResponse.json({ success: true, data });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to fetch tasks' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
-// POST - Create task
+// POST /api/tasks
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient();
@@ -45,22 +45,22 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('tasks')
-      .insert([body])
+      .insert(body)
       .select()
       .single();
 
     if (error) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     return NextResponse.json({ success: true, data }, { status: 201 });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to create task' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
