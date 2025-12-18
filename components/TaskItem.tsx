@@ -24,8 +24,8 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: task.user_id,
-          is_completed: !task.is_completed,
+          userId: task.user_id,
+          isCompleted: !task.is_completed,
         }),
       });
 
@@ -55,7 +55,7 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: task.user_id,
+          userId: task.user_id,
           title: title.trim(),
           description: description.trim() || null,
         }),
@@ -89,9 +89,10 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
   async function handleConfirmDelete() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/tasks/${task.id}?user_id=${encodeURIComponent(task.user_id)}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(
+        `/api/tasks/${task.id}?userId=${encodeURIComponent(task.user_id)}`,
+        { method: 'DELETE' },
+      );
 
       if (res.ok) {
         setShowDeleteModal(false);
@@ -175,14 +176,18 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
           <div className="flex-1 min-w-0">
             <h3
               className={`font-medium text-lg ${
-                task.is_completed ? 'line-through text-gray-500' : 'text-gray-900'
+                task.is_completed
+                  ? 'line-through text-gray-500'
+                  : 'text-gray-900'
               }`}
             >
               {task.title}
             </h3>
 
             {task.description && (
-              <p className="text-gray-600 text-sm mt-1">{task.description}</p>
+              <p className="text-gray-600 text-sm mt-1">
+                {task.description}
+              </p>
             )}
 
             <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
