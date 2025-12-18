@@ -14,6 +14,9 @@ export const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
 // Client para uso no cliente (Components, Pages)
 export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
+// Exportação padrão (compatibilidade com imports existentes)
+export const supabase = supabaseServer;
+
 // Funções auxiliares para compatibilidade
 export function createServerClient() {
   return createClient(supabaseUrl, supabaseServiceKey, {
