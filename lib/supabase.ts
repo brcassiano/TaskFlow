@@ -19,13 +19,23 @@ export const supabaseServer = createClient(supabaseUrl, supabaseServiceKey!, {
 export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
 // Exportação padrão
-export const supabase = supabaseServer;
+export const supabase = supabaseClient;
 
-// Funções auxiliares
+// Funções auxiliares - agora com as variáveis garantidas como string
 export function createServerClient() {
-  return createClient(supabaseUrl, supabaseAnonKey);
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing server environment variables');
+  }
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      persistSession: false,
+    },
+  });
 }
 
 export function createBrowserClient() {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing client environment variables');
+  }
   return createClient(supabaseUrl, supabaseAnonKey);
 }
