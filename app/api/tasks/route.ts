@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase-server';
+import { supabase } from '@/lib/supabase';
 
 // GET /api/tasks?userId=...
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createServerClient();
+    // supabase já importado diretamente
     const searchParams = new URL(request.url).searchParams;
     const userId = searchParams.get('userId');
 
