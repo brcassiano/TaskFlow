@@ -199,7 +199,7 @@ export default function DashboardClient() {
                 <h2 className="text-2xl font-bold">Link WhatsApp</h2>
               </div>
               <div className="bg-green-50 rounded-lg p-5 border-2 border-green-300">
-                de className="text-lg font-mono font-bold text-green-900 block text-center mb-4">
+                <code className="text-lg font-mono font-bold text-green-900 block text-center mb-4">
                   #to-do-list link {linkCode}
                 </code>
                 <a
