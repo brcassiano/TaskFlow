@@ -31,7 +31,7 @@ export default function TaskForm({ userId, onTaskCreated }: TaskFormProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: userId,
+          user_id: userId,
           title: title.trim(),
           description: description.trim() || null,
         }),
@@ -40,13 +40,12 @@ export default function TaskForm({ userId, onTaskCreated }: TaskFormProps) {
       const data = await res.json();
 
       if (res.ok) {
-        // Reset form
         setTitle('');
         setDescription('');
         setShowDescription(false);
         setError('');
         setIsOpen(false);
-        onTaskCreated(); // Trigger refresh
+        onTaskCreated();
       } else {
         setError(data.error || 'Failed to create task');
       }
@@ -66,7 +65,6 @@ export default function TaskForm({ userId, onTaskCreated }: TaskFormProps) {
     setIsOpen(false);
   }
 
-  // Se não está aberto, mostra apenas o botão
   if (!isOpen) {
     return (
       <div className="mb-6">
@@ -81,7 +79,6 @@ export default function TaskForm({ userId, onTaskCreated }: TaskFormProps) {
     );
   }
 
-  // Quando aberto, mostra o formulário completo
   return (
     <form
       onSubmit={handleSubmit}
@@ -118,7 +115,6 @@ export default function TaskForm({ userId, onTaskCreated }: TaskFormProps) {
         autoFocus
       />
 
-      {/* Link para mostrar descrição */}
       {!showDescription ? (
         <button
           type="button"
@@ -140,7 +136,6 @@ export default function TaskForm({ userId, onTaskCreated }: TaskFormProps) {
         />
       )}
 
-      {/* Botões alinhados à direita com tamanho proporcional */}
       <div className="flex gap-2 justify-end">
         <button
           type="button"

@@ -24,8 +24,8 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: task.user_id,
-          isCompleted: !task.is_completed,
+          user_id: task.user_id,
+          is_completed: !task.is_completed,
         }),
       });
 
@@ -55,7 +55,7 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: task.user_id,
+          user_id: task.user_id,
           title: title.trim(),
           description: description.trim() || null,
         }),
@@ -163,7 +163,6 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
         }`}
       >
         <div className="flex items-start gap-3">
-          {/* Checkbox */}
           <input
             type="checkbox"
             checked={task.is_completed}
@@ -172,7 +171,6 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
             className="w-5 h-5 mt-1 cursor-pointer"
           />
 
-          {/* Content */}
           <div className="flex-1 min-w-0">
             <h3
               className={`font-medium text-lg ${
@@ -205,7 +203,6 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex gap-2">
             <button
               onClick={() => setIsEditing(true)}
@@ -227,7 +224,6 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
         </div>
       </div>
 
-      {/* Modal de confirmação */}
       <ConfirmModal
         isOpen={showDeleteModal}
         title="Delete Task"
