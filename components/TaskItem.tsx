@@ -23,7 +23,10 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
       const res = await fetch(`/api/tasks/${task.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_completed: !task.is_completed }),
+        body: JSON.stringify({
+          user_id: task.user_id,
+          is_completed: !task.is_completed,
+        }),
       });
 
       if (res.ok) {
@@ -51,9 +54,10 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
       const res = await fetch(`/api/tasks/${task.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          title: title.trim(), 
-          description: description.trim() || null 
+        body: JSON.stringify({
+          user_id: task.user_id,
+          title: title.trim(),
+          description: description.trim() || null,
         }),
       });
 
@@ -85,8 +89,8 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
   async function handleConfirmDelete() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/tasks/${task.id}`, { 
-        method: 'DELETE' 
+      const res = await fetch(`/api/tasks/${task.id}?user_id=${encodeURIComponent(task.user_id)}`, {
+        method: 'DELETE',
       });
 
       if (res.ok) {
@@ -150,10 +154,10 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
 
   return (
     <>
-      <div 
+      <div
         className={`p-4 border rounded-lg mb-3 transition-all ${
-          task.is_completed 
-            ? 'bg-gray-50 border-gray-300' 
+          task.is_completed
+            ? 'bg-gray-50 border-gray-300'
             : 'bg-white border-gray-200 hover:border-blue-300'
         }`}
       >
@@ -169,18 +173,16 @@ export default function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <h3 
+            <h3
               className={`font-medium text-lg ${
                 task.is_completed ? 'line-through text-gray-500' : 'text-gray-900'
               }`}
             >
               {task.title}
             </h3>
-            
+
             {task.description && (
-              <p className="text-gray-600 text-sm mt-1">
-                {task.description}
-              </p>
+              <p className="text-gray-600 text-sm mt-1">{task.description}</p>
             )}
 
             <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
