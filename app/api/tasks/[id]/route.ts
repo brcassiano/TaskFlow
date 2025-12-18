@@ -4,10 +4,10 @@ import { supabase } from '@/lib/supabase';
 // PATCH /api/tasks/[id]
 export async function PATCH(
   request: NextRequest,
-  params: Promise<{ id: string }>,
+  { params }: { params: { id: string } },
 ) {
   try {
-    const { id } = await params;
+    const { id } = params;
     const body = await request.json();
 
     console.log('PATCH /api/tasks/[id] - id, body:', id, body);
@@ -77,10 +77,10 @@ export async function PATCH(
 // DELETE /api/tasks/[id]
 export async function DELETE(
   request: NextRequest,
-  params: Promise<{ id: string }>,
+  { params }: { params: { id: string } },
 ) {
   try {
-    const { id } = await params;
+    const { id } = params;
     const searchParams = new URL(request.url).searchParams;
     const userId = searchParams.get('userId');
 
@@ -121,10 +121,10 @@ export async function DELETE(
 // GET /api/tasks/[id]
 export async function GET(
   request: NextRequest,
-  params: Promise<{ id: string }>,
+  { params }: { params: { id: string } },
 ) {
   try {
-    const { id } = await params;
+    const { id } = params;
     const searchParams = new URL(request.url).searchParams;
     const userId = searchParams.get('userId');
 
