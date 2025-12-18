@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase';
 // GET /api/tasks?userId=...
 export async function GET(request: NextRequest) {
   try {
-    // supabase já importado diretamente
     const searchParams = new URL(request.url).searchParams;
     const userId = searchParams.get('userId');
 
@@ -40,7 +39,6 @@ export async function GET(request: NextRequest) {
 // POST /api/tasks
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerClient();
     const body = await request.json();
 
     const { data, error } = await supabase
