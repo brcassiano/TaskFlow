@@ -26,7 +26,7 @@ export default function DashboardClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // NOVO: Check link status no banco quando userId muda
+  // Check link status no banco quando userId muda
   useEffect(() => {
     if (userId && !userId.startsWith('guest-')) {
       // Se é phone (não guest), verifica se tem vínculo no banco
@@ -43,9 +43,14 @@ export default function DashboardClient() {
 
   async function checkLinkStatus() {
     try {
+      console.log('Checking link status for phone:', userId);
       const res = await fetch(`/api/link?phone=${userId}`);
       const data = await res.json();
+      console.log('Link status response:', data);
+
       const linked = data.data && Array.isArray(data.data) && data.data.length > 0;
+      console.log('Is linked:', linked);
+
       setIsLinked(linked);
       localStorage.setItem('taskflow_linked', linked ? 'true' : 'false');
     } catch (err) {
