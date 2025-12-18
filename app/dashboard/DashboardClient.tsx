@@ -26,12 +26,32 @@ export default function DashboardClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // NOVO: Check link status no banco quando userId muda
+  useEffect(() => {
+    if (userId && !userId.startsWith('guest-')) {
+      // Se é phone (não guest), verifica se tem vínculo no banco
+      checkLinkStatus();
+    }
+  }, [userId]);
+
   useEffect(() => {
     if (!isLinked && taskCount > 0 && linkCode) {
       const bannerShown = localStorage.getItem('taskflow_banner_shown');
       if (!bannerShown) setShowBanner(true);
     }
   }, [taskCount, isLinked, linkCode]);
+
+  async function checkLinkStatus() {
+    try {
+      const res = await fetch(`/api/link?phone=${userId}`);
+      const data = await res.json();
+      const linked = data.data && Array.isArray(data.data) && data.data.length > 0;
+      setIsLinked(linked);
+      localStorage.setItem('taskflow_linked', linked ? 'true' : 'false');
+    } catch (err) {
+      console.error('Error checking link status:', err);
+    }
+  }
 
   function initializeUser() {
     try {
@@ -101,7 +121,6 @@ export default function DashboardClient() {
   }
 
   function getWhatsAppLink() {
-    const message = `#to-do-list link ${linkCode}`;
     return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`#to-do-list link ${linkCode}`)}`;
   }
 
@@ -180,7 +199,7 @@ export default function DashboardClient() {
                 <h2 className="text-2xl font-bold">Link WhatsApp</h2>
               </div>
               <div className="bg-green-50 rounded-lg p-5 border-2 border-green-300">
-                <code className="text-lg font-mono font-bold text-green-900 block text-center mb-4">
+                de className="text-lg font-mono font-bold text-green-900 block text-center mb-4">
                   #to-do-list link {linkCode}
                 </code>
                 <a
