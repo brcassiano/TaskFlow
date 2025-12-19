@@ -180,62 +180,78 @@ npm install
 ```
 ### 2. Supabase Setup
 
-Run the following SQL in your Supabase **SQL Editor**:
+
+Run the following SQL in your Supabase **SQL Editor** to criar as tabelas e índices necessários:
 ```sql
 -- 1. Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 2. Profiles table
-CREATE TABLE profiles (
-id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-email TEXT UNIQUE NOT NULL,
-name TEXT,
-created_at TIMESTAMP DEFAULT NOW()
-);
+create table public.profiles (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  email text null,
+  name text null,
+  created_at timestamp with time zone null default now(),
+  phone text null,
+  is_guest boolean null default true,
+  link_code text null,
+  created_via text null default 'web'::text,
+  constraint profiles_pkey primary key (id),
+  constraint profiles_email_key unique (email),
+  constraint profiles_link_code_key unique (link_code),
+  constraint profiles_phone_key unique (phone)
+) TABLESPACE pg_default;
+
+create index IF not exists idx_profiles_phone on public.profiles using btree (phone) TABLESPACE pg_default
+where
+  (phone is not null);
+
+create index IF not exists idx_profiles_link_code on public.profiles using btree (link_code) TABLESPACE pg_default
+where
+  (link_code is not null);
+
+create index IF not exists idx_profiles_is_guest on public.profiles using btree (is_guest) TABLESPACE pg_default;
 
 -- 3. Tasks table
-CREATE TABLE tasks (
-id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-title TEXT NOT NULL,
-description TEXT,
-is_completed BOOLEAN DEFAULT FALSE,
-created_at TIMESTAMP DEFAULT NOW(),
-updated_at TIMESTAMP DEFAULT NOW()
-);
+create table public.tasks (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  user_id text not null,
+  title text not null,
+  description text null,
+  is_completed boolean null default false,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint tasks_pkey primary key (id)
+) TABLESPACE pg_default;
 
--- 4. Indexes
-CREATE INDEX idx_tasks_user_id ON tasks(user_id);
-CREATE INDEX idx_tasks_completed ON tasks(is_completed);
+create index IF not exists idx_tasks_completed on public.tasks using btree (is_completed) TABLESPACE pg_default;
 
--- 5. Auto-update timestamp Function
-CREATE OR REPLACE FUNCTION update_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-NEW.updated_at = NOW();
-RETURN NEW;
-END;
+create index IF not exists idx_tasks_created_at on public.tasks using btree (created_at desc) TABLESPACE pg_default;
 
--- 6. Trigger
-```sql
-CREATE TRIGGER tasks_updated_at
-BEFORE UPDATE ON tasks
-FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+create index IF not exists idx_tasks_user_id on public.tasks using btree (user_id) TABLESPACE pg_default;
 
--- 7. Enable Realtime
-```sql
-ALTER TABLE tasks REPLICA IDENTITY FULL;
-ALTER PUBLICATION supabase_realtime ADD TABLE tasks;
+create trigger tasks_updated_at BEFORE
+update on tasks for EACH row
+execute FUNCTION update_updated_at ();
 
--- 8. Create Demo User
+-- 4. Chat Sessions table
+create table public.chat_sessions (
+  id uuid not null default gen_random_uuid (),
+  user_phone text not null,
+  is_active boolean null default true,
+  created_at timestamp with time zone null default now(),
+  last_interaction timestamp with time zone null default now(),
+  context jsonb null default '{}'::jsonb,
+  constraint chat_sessions_pkey primary key (id),
+  constraint chat_sessions_user_phone_key unique (user_phone)
+) TABLESPACE pg_default;
 
-INSERT INTO profiles (email, name)
-VALUES ('demo@taskflow.com', 'Demo User')
-ON CONFLICT (email) DO NOTHING
-RETURNING id, email;
+create index IF not exists idx_chat_sessions_phone on public.chat_sessions using btree (user_phone) TABLESPACE pg_default;
+
+create index IF not exists idx_chat_sessions_active on public.chat_sessions using btree (is_active) TABLESPACE pg_default;
 ```
 
-> **⚠️ Important:** Copy the `id` (UUID) returned from step 8! You'll need it below.
+> **Nota:** Não é mais necessário criar usuário demo manualmente. O perfil é criado e vinculado automaticamente ao acessar o app (web ou WhatsApp).
 
 ### 3. Environment Variables
 
@@ -248,16 +264,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5...
 ```
 
-### 4. Configuration
-
-Update `app/dashboard/page.tsx`:
-```bash
-const USER_ID = 'paste-your-uuid-here';
-```
-### 5. Run
+### 4. Run
 ```bash
 npm run dev
 ```
+
+O usuário é criado e gerenciado automaticamente pelo sistema, não sendo necessário configurar manualmente o USER_ID.
 ## 📡 REST API Documentation
 
 ### Endpoints

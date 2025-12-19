@@ -1,0 +1,1492 @@
+{
+  "name": "Task_Manager_Whatsapp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-task",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        320,
+        32
+      ],
+      "id": "f9b2bee2-ba5e-42e8-9e6f-a2c60ed2bad9",
+      "name": "Webhook",
+      "webhookId": "e96417be-485f-42c7-a5e8-d21c727e9ed0"
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $node['normalize_incoming'].json || {};\nconst session  = $node['check_session'].json || {};\nconst profile  = $node['get_or_create_profile']\n  ? $node['get_or_create_profile'].json\n  : {};\n\n// Novo: status de link vindo do link_flag\nlet linkStatus = null;\ntry {\n  linkStatus = $node['link_flag'] ? $node['link_flag'].json : null;\n} catch (e) {\n  linkStatus = null;\n}\n\n// 1) lê a saída do node \"AI Agent\"\nlet ai = null;\ntry {\n  const agentOut = $node['AI Agent'] ? $node['AI Agent'].json : null;\n\n  if (agentOut && typeof agentOut.output === 'string') {\n    try {\n      ai = JSON.parse(agentOut.output);\n    } catch (e) {\n      ai = null;\n    }\n  } else {\n    ai = agentOut;\n  }\n} catch (e) {\n  ai = null;\n}\n\n// 2) fallback: se por algum motivo não achou o AI Agent, tenta o input\nif (!ai) {\n  let raw = $input.item.json || null;\n  if (raw && typeof raw.output === 'string') {\n    try {\n      ai = JSON.parse(raw.output);\n    } catch (e) {\n      ai = null;\n    }\n  } else {\n    ai = raw;\n  }\n}\n\nconst userPhone = incoming.remoteJid || incoming.phone || '';\nconst userId    = profile.profileId || userPhone;\n\nconst route   = ai?.route   || 'ignore';\nconst action  = ai?.action  || null;\nconst args    = Array.isArray(ai?.args) ? ai.args : [];\nconst missing = Array.isArray(ai?.missing) ? ai.missing : [];\n\nconst rawMessage   = incoming.text || '';\nconst cleanMessage = rawMessage\n  .replace(/to-do-list/gi, '')\n  .replace(/#/g, '')\n  .trim();\n\nconst remoteJid = incoming.remoteJid || userPhone || '';\n\n// Retorno agora inclui linkStatus\nreturn {\n  route,          // activate | process | deactivate | ignore | menu | ask_information\n  action,         // new | list | complete | delete | link | null\n  args,\n  missing,        // [\"title\"], [\"task_reference\"], [\"link_code\"]\n  rawMessage,\n  cleanMessage,\n  remoteJid,\n  phone: remoteJid,\n  userId,\n  linkStatus,     // { linked: true, raw: {...} } ou null\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        32
+      ],
+      "id": "86998664-196a-4d55-88cf-1256b49cf8b6",
+      "name": "parse_message"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.action}}",
+                    "rightValue": "new",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "e79f57ac-adc0-44dc-89c2-1612b4cf6ac6"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "new"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "0cdb7234-d3e2-4ee6-ba85-473fbdffef0a",
+                    "leftValue": "={{$json.action}}",
+                    "rightValue": "list",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "list"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "215f1594-546a-47d7-b52f-c9f9829e768b",
+                    "leftValue": "={{$json.action}}",
+                    "rightValue": "complete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "complete"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "05144a52-0e6d-4456-b717-a9213c1141d9",
+                    "leftValue": "={{$json.action}}",
+                    "rightValue": "delete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "delete"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "0af6f52b-b0bf-4ccc-a6e8-afa04a58880a",
+                    "leftValue": "={{$json.action}}",
+                    "rightValue": "link",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "link"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        3008,
+        -48
+      ],
+      "id": "30209093-8271-49ee-a084-fb74facab0f0",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://task-flow-bruno-c.vercel.app/api/tasks",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userId",
+              "value": "={{$json.userId}}"
+            },
+            {
+              "name": "title",
+              "value": "={{$json.args.join(' ')}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3968,
+        -288
+      ],
+      "id": "0346e1b7-4152-4cc1-8756-9da2f9c62dfe",
+      "name": "Create_Task"
+    },
+    {
+      "parameters": {
+        "url": "=https://task-flow-bruno-c.vercel.app/api/tasks?userId={{ $json.userId }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3968,
+        -96
+      ],
+      "id": "6c5881c2-8ca3-44a6-bbbb-66ed8c5df69d",
+      "name": "List_Tasks"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://task-flow-bruno-c.vercel.app/api/tasks/{{ $json.args[0] }}?userId={{ $json.userId }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userId",
+              "value": "={{ $json.userId }}"
+            },
+            {
+              "name": "is_completed",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3968,
+        80
+      ],
+      "id": "c3b0b070-353b-42fe-ac5a-a3ca02b0c3de",
+      "name": "Complete_Task"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://task-flow-bruno-c.vercel.app/api/tasks/{{ $json.args[0] }}?userId={{ $json.userId }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3968,
+        272
+      ],
+      "id": "32b98a61-dbda-4b00-8d9c-56cf48233bd2",
+      "name": "Delete_Task"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "activate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "045e47b3-85c1-473d-a263-c529c8ae5cea"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "activate"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "5bd0321c-63d5-46c0-a5e5-4749e51e9b0e",
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "process",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "process"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f6222bc0-ba7d-4b9c-9672-e0cb36d043bb",
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "deactivate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "deactivate"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "04d684a6-8776-4028-9cac-d68b03b10a9b",
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "ignore",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ignore"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "0696d1e2-2afb-4feb-b15d-efe79678bde0",
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "menu",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "menu"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "00279449-32f5-4e7f-8440-4caf6de11743",
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "ask_information",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ask_information"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2208,
+        -32
+      ],
+      "id": "b1590cca-75b2-4099-8f08-ceac8eb376db",
+      "name": "Switch1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://task-flow-bruno-c.vercel.app/api/sessions",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{$('parse_message').item.json.remoteJid}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2624,
+        -304
+      ],
+      "id": "55dec074-f898-4121-8634-2bc3089990d6",
+      "name": "create_session"
+    },
+    {
+      "parameters": {
+        "jsCode": "const userData = $('parse_message').item.json;\n\nconst text =\n  \"TaskFlow mode activated.\\n\\n\" +\n  \"What would you like to do?\\n\\n\" +\n  \"1️⃣ Create a Task\\n\" +\n  \"2️⃣ List Tasks\\n\" +\n  \"3️⃣ Mark a Task as Completed\\n\" +\n  \"4️⃣ Delete a Task\\n\" +\n  \"5️⃣ Link WhatsApp to Web App\\n\\n\" +\n  \"0️⃣ Exit\";\n\nreturn [\n  {\n    json: {\n      text,\n      phone: userData.remoteJid,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2832,
+        -304
+      ],
+      "id": "a50ae3e0-6d71-4659-8d30-fac9c99429ec",
+      "name": "starting_message"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pm = $('parse_message').item.json;\n\nreturn [{\n  json: {\n    phone: pm.remoteJid,\n    text: 'TaskFlow mode disabled. Type #to-do-list to start again.',\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        288
+      ],
+      "id": "39e28884-d016-4b35-81f3-a40bd7e9a99f",
+      "name": "deactivate_message"
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "instanceName": "task-manager",
+        "remoteJid": "={{$json.phone}}",
+        "messageText": "={{$json.text}}",
+        "options_message": {}
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        5568,
+        80
+      ],
+      "id": "9f77f9c0-0cb7-4768-886a-267faa64d94b",
+      "name": "Send_Message",
+      "credentials": {
+        "evolutionApi": {
+          "id": "eXzRrJg641xgmOmb",
+          "name": "Evolution account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "instanceName": "task-manager",
+        "remoteJid": "={{$json.phone}}",
+        "messageText": "={{$json.text}}",
+        "options_message": {}
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        3040,
+        -304
+      ],
+      "id": "62179f19-e51b-48a1-807c-c2fe4e65e697",
+      "name": "Send_Message1",
+      "credentials": {
+        "evolutionApi": {
+          "id": "eXzRrJg641xgmOmb",
+          "name": "Evolution account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "instanceName": "task-manager",
+        "remoteJid": "={{$json.phone}}",
+        "messageText": "={{$json.text}}",
+        "options_message": {}
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        3008,
+        288
+      ],
+      "id": "43878130-a6b3-4cf0-8a6e-7f76fea3064a",
+      "name": "Send_Message2",
+      "credentials": {
+        "evolutionApi": {
+          "id": "eXzRrJg641xgmOmb",
+          "name": "Evolution account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://task-flow-bruno-c.vercel.app/api/sessions?phone={{$('parse_message').item.json.remoteJid}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2592,
+        288
+      ],
+      "id": "0817a402-9844-4334-a0a0-97f554e8e7f1",
+      "name": "deactivate_session"
+    },
+    {
+      "parameters": {
+        "url": "=https://task-flow-bruno-c.vercel.app/api/sessions?phone={{$('normalize_incoming').item.json.remoteJid}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        768,
+        32
+      ],
+      "id": "6ad2e89b-a760-4b8c-8d3c-bcf66c8b49c2",
+      "name": "check_session"
+    },
+    {
+      "parameters": {
+        "jsCode": "// O payload vem com headers, params, query, body\nconst w = $input.item.json;\nconst body = w?.body || w || {};\n\n// ===== FILTRO 1: Aceitar apenas mensagens recebidas (não enviadas) =====\nconst event = body?.event || '';\nconst fromMe = body?.data?.key?.fromMe || false;\n\n// Se for uma mensagem enviada por você (fromMe=true) ou evento que não é mensagem, ignora\nif (fromMe || event !== 'messages.upsert') {\n  return [{ json: { ignored: true, reason: `event: ${event}, fromMe: ${fromMe}` } }];\n}\n\n// ===== EXTRAÇÃO DO REMOTEJID =====\nconst remoteJidFull = body?.data?.key?.remoteJid || '';\nconst remoteJid = String(remoteJidFull || '').split('@')[0]; // Só número\n\n// ===== EXTRAÇÃO DO TEXTO =====\nconst msg = body?.data?.message || {};\nconst text =\n  msg?.conversation ||\n  msg?.extendedTextMessage?.text ||\n  msg?.text ||\n  msg?.message ||\n  '';\n\n// Se não houver texto (ex: imagem, áudio), ignora\nif (!text || text.trim() === '') {\n  return [{ json: { ignored: true, reason: 'No text found' } }];\n}\n\n// ===== DETERMINAÇÃO DO TIPO =====\nconst messageType =\n  msg?.conversation ? 'conversation'\n  : msg?.extendedTextMessage?.text ? 'extendedTextMessage'\n  : msg?.text ? 'text'\n  : 'unknown';\n\n// ===== RETORNO NORMALIZADO =====\nreturn [\n  {\n    json: {\n      remoteJid,\n      phone: remoteJid, // Só número\n      remoteJidFull,\n      text: String(text || '').trim(),\n      messageType,\n      instance: body?.instance || 'unknown',\n      event,\n      fromMe,\n      ignored: false,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        32
+      ],
+      "id": "0b71fcef-02f4-4d58-bb37-05e0e416f7f4",
+      "name": "normalize_incoming"
+    },
+    {
+      "parameters": {
+        "url": "=https://task-flow-bruno-c.vercel.app/api/link?phone={{$('normalize_incoming').item.json.remoteJid}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4736,
+        -272
+      ],
+      "id": "49623baa-4ff3-4b37-bd1e-d96125ea2c22",
+      "name": "check_link_status"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a3cf61ce-0bb7-43c5-9a47-01150a9a13f2",
+              "leftValue": "={{ $json.data.linked }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4944,
+        -272
+      ],
+      "id": "b93aa0dc-d136-4bdf-bdfb-adcd8aa21a10",
+      "name": "not_linked"
+    },
+    {
+      "parameters": {
+        "jsCode": "const created = $('Create_Task').item.json;\nconst phone = $('normalize_incoming').item.json.remoteJid;\nconst profileData = $input.item.json;\nconst linkCode = profileData?.linkCode || 'XXXXXXXX';\n\nconst title =\n  created?.data?.title ||\n  created?.data?.task?.title ||\n  created?.title ||\n  'Task';\n\nconst text =\n  `✅ Task created: \"${title}\"\\n\\n` +\n  `📱 Sync with Web App?\\n\\n` +\n  `1️⃣ Open https://task-flow-bruno-c.vercel.app\\n` +\n  `2️⃣ Click \"Link WhatsApp\"\\n` +\n  `3️⃣ Send: link ${linkCode}\\n\\n` +\n  `💡 Your tasks will sync automatically after linking!`;\n\nreturn [{ json: { phone, text } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5152,
+        -368
+      ],
+      "id": "fdfb07bf-ce4d-4376-ab89-f1de51f386f1",
+      "name": "prepare_link"
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "instanceName": "task-manager",
+        "remoteJid": "={{$json.phone}}",
+        "messageText": "={{$json.text}}",
+        "options_message": {}
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        5344,
+        -368
+      ],
+      "id": "1370a21f-8840-4825-b343-390c9fe0ef0d",
+      "name": "Send_Message3",
+      "credentials": {
+        "evolutionApi": {
+          "id": "eXzRrJg641xgmOmb",
+          "name": "Evolution account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://task-flow-bruno-c.vercel.app/api/link",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "code",
+              "value": "={{ $json.args[0] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3968,
+        480
+      ],
+      "id": "7326254e-fc43-4199-8966-9f57a4d4798d",
+      "name": "Link_Account"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pm = $input.item.json;\n\nconst text =\n  \"What would you like to do?\\n\\n\" +\n  \"1️⃣ Create a Task\\n\" +\n  \"2️⃣ List Tasks\\n\" +\n  \"3️⃣ Mark a Task as Completed\\n\" +\n  \"4️⃣ Delete a Task\\n\" +\n  \"5️⃣ Link WhatsApp to Web App\\n\" +\n  \"0️⃣ Exit\";\n\nreturn [{ json: { phone: pm.phone, text } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2592,
+        480
+      ],
+      "id": "ab3f2f4c-a2ca-4891-a4ce-2414126cdf81",
+      "name": "menu_message"
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "instanceName": "task-manager",
+        "remoteJid": "={{$json.phone}}",
+        "messageText": "={{$json.text}}",
+        "options_message": {}
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        2800,
+        480
+      ],
+      "id": "03ed5446-c39b-4461-95d2-398c0e0843b3",
+      "name": "Send_Message4",
+      "credentials": {
+        "evolutionApi": {
+          "id": "eXzRrJg641xgmOmb",
+          "name": "Evolution account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dados da sessão e do profile\nconst session    = $node['check_session'].json || {};\nconst profileRes = $input.item.json || {};   // output do get_profile\n\nconst incoming = $node['normalize_incoming'].json || {};\nconst phone =\n  incoming.remoteJidFull ||\n  incoming.phone;\n\nlet profileId = phone; // fallback\n\nif (profileRes.success && profileRes.data && profileRes.data.id) {\n  profileId = profileRes.data.id;\n}\n\n// ---- Status de link (equivalente ao link_flag antigo) ----\nlet linkStatusRaw = null;\ntry {\n  linkStatusRaw = $node['check_link_status1']\n    ? $node['check_link_status1'].json\n    : null;\n} catch (e) {\n  linkStatusRaw = null;\n}\n\nlet linked = false;\nif (linkStatusRaw) {\n  linked =\n    !!linkStatusRaw.data?.linked ||\n    linkStatusRaw.success === true;\n}\n\nreturn [\n  {\n    json: {\n      // sessão original\n      ...session,           // mantém success, data (sessão)\n\n      // dados de perfil\n      profileId,\n      phone,\n\n      // info de link já normalizada + bruto\n      linkResult: {\n        linked,\n        raw: linkStatusRaw,\n      },\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        32
+      ],
+      "id": "6ffa211c-1f5d-4c74-bf82-983999af3f61",
+      "name": "get_or_create_profile"
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $node['normalize_incoming'].json;\nconst phone = incoming.remoteJidFull;\n\n// Buscar profile pelo phone\ntry {\n  const response = await fetch(\n    'https://task-flow-bruno-c.vercel.app/api/profiles/whatsapp',\n    {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ phone }),\n    },\n  );\n\n  const result = await response.json();\n\n  if (result.success && result.data) {\n    return [\n      {\n        json: {\n          ...$input.item.json,   // <- sem espaço aqui\n          linkCode: result.data.link_code,\n          isGuest: result.data.is_guest,\n        },\n      },\n    ];\n  }\n} catch (err) {\n  console.error('Error getting profile:', err);\n}\n\nreturn [$input.item.json];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4528,
+        -272
+      ],
+      "id": "8376886d-466b-43da-851b-dc7d314f2a7c",
+      "name": "get_profile_link_code"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://task-flow-bruno-c.vercel.app/api/profiles/whatsapp",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $('normalize_incoming').item.json.remoteJidFull || $('normalize_incoming').item.json.phone }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1232,
+        32
+      ],
+      "id": "af02fec8-2a73-4da0-9a48-44d3980f89b5",
+      "name": "get_profile"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=={{ JSON.stringify({\n  rawMessage: $node[\"normalize_incoming\"].json.text,\n  isActive: Array.isArray($node[\"check_session\"].json.data)\n    ? !!$node[\"check_session\"].json.data[0]?.is_active\n    : !!$node[\"check_session\"].json.data?.is_active,\n  remoteJid: $node[\"normalize_incoming\"].json.remoteJidFull || $node[\"normalize_incoming\"].json.phone,\n  phone: $node[\"normalize_incoming\"].json.remoteJidFull || $node[\"normalize_incoming\"].json.phone,\n  userId: $node[\"get_or_create_profile\"]\n    ? (\n        $node[\"get_or_create_profile\"].json.profileId ||\n        ($node[\"normalize_incoming\"].json.remoteJidFull || $node[\"normalize_incoming\"].json.phone)\n      )\n    : ($node[\"normalize_incoming\"].json.remoteJidFull || $node[\"normalize_incoming\"].json.phone)\n}) }}\n",
+        "options": {
+          "systemMessage": "You are an intent router for a WhatsApp task manager bot (TaskFlow).\nYou MUST respond with a single JSON object and NOTHING else.\n\nThe user interacts by sending free text or simple options like \"1\", \"2\", \"3\", etc.\nYou receive the current message and session state, and you must decide:\n\n- route: one of\n  \"activate\" | \"process\" | \"deactivate\" | \"ignore\" | \"menu\" | \"ask_information\"\n\n- action: one of\n  \"new\" | \"list\" | \"complete\" | \"delete\" | \"link\" | null\n\n- args: array of strings with extracted parameters (task title, task reference, link code, etc.)\n\n- missing: array of strings indicating missing information:\n  - \"title\"           → missing task title\n  - \"task_reference\"  → missing which task to act on (index or id)\n  - \"link_code\"       → missing link code\n\nINPUT FORMAT (JSON string in the user message):\n{\n  \"rawMessage\": string,\n  \"isActive\": boolean,\n  \"remoteJid\": string,\n  \"phone\": string,\n  \"userId\": string\n}\n\nOUTPUT FORMAT (STRICT JSON, no markdown, no explanation):\n{\n  \"route\": \"activate\" | \"process\" | \"deactivate\" | \"ignore\" | \"menu\" | \"ask_information\",\n  \"action\": \"new\" | \"list\" | \"complete\" | \"delete\" | \"link\" | null,\n  \"args\": string[],\n  \"missing\": string[]\n}\n\nROUTING RULES:\n\n1) Activation keyword:\n   - If rawMessage contains \"#to-do-list\" (case-insensitive):\n     - If isActive = false → route = \"activate\", action = null, args = [], missing = []\n     - If isActive = true  → route = \"menu\",     action = null, args = [], missing = []\n\n2) No active session:\n   - If isActive = false AND rawMessage does NOT contain \"#to-do-list\":\n     - route = \"ignore\", action = null, args = [], missing = []\n     - Do NOT try to interpret commands.\n\n3) Deactivation:\n   - If isActive = true AND rawMessage clearly expresses leaving or stopping:\n     words like \"0\", \"exit\", \"quit\", \"stop\", \"done\", \"bye\", \"goodbye\", \"leave\", \"sair\", \"finalizar\", \"tchau\", \"fim\", \"cancelar\"\n     → route = \"deactivate\", action = null, args = [], missing = []\n\n4) Help / menu:\n   - If isActive = true AND rawMessage is help-like:\n     \"help\", \"menu\", \"show commands\", \"commands\", or an empty or whitespace-only string\n     → route = \"menu\", action = null, args = [], missing = []\n\n5) PROCESS commands when isActive = true:\n\n   IMPORTANT PRIORITY:\n   - You MUST first check if the message matches the LINK option (5) before treating it as NEW.\n   - Specifically: if rawMessage is exactly \"5\" (ignoring spaces) or the user mentions \"link\" or \"link code\",\n     you MUST handle it as LINK (see rule 5.5) and NEVER as NEW.\n\n   5.1) NEW (create task):\n\n       Examples (all must be interpreted as \"new\"):\n         \"new Buy bread\"\n         \"create task\"\n         \"create a new task\"\n         \"Create a task named buy a coffee\"\n         \"I want to create a task named buy a coffee\"\n         \"Create a task\\nName: Pay the bills\"\n\n       - You MUST NOT interpret the plain option \"5\" as NEW.\n         Option \"5\" is reserved for LINK. Only use option \"1\" for NEW.\n\n       - If the message clearly means creating a task (using words like \"new\", \"create task\", etc., or option \"1\"):\n         action = \"new\"\n\n       - If you can extract the task title:\n         - route = \"process\"\n         - args[0] = title (e.g. \"buy a coffee\")\n         - missing = []\n\n       - If the user only chose the option without a title (e.g. \"1\", \"new\", \"create task\", \"create a new task\"):\n         - route = \"ask_information\"\n         - action = \"new\"\n         - args = []\n         - missing = [\"title\"]\n\n       - When parsing patterns:\n         - For \"Create a task\\nName: X\", extract \"X\" as the title.\n\n   5.2) LIST (show tasks):\n\n       Examples (all must be interpreted as \"list\"):\n         \"list\"\n         \"2\"\n         \"show tasks\"\n         \"show my tasks\"\n         \"list my tasks\"\n         \"show all my tasks\"\n         \"show pending tasks\"\n         \"list all my tasks\"\n\n       - In all these cases:\n         - route = \"process\"\n         - action = \"list\"\n         - args = []\n         - missing = []\n\n   5.3) COMPLETE:\n\n       Examples:\n         \"complete 3\"\n         \"complete task 3\"\n         \"mark task 2 as done\"\n         \"finish task 5\"\n\n       - If the message contains the word \"complete\", \"finish\" or \"mark\" (or similar)\n         AND you can identify which task (a number or id) from the message:\n         - route = \"process\"\n         - action = \"complete\"\n         - args[0] = that reference as string (e.g. \"3\")\n         - missing = []\n\n       - If the user sends ONLY a digit like \"3\" (without verbs like \"complete\", \"finish\", \"mark\")\n         or just the word \"complete\":\n         - route = \"ask_information\"\n         - action = \"complete\"\n         - args = []\n         - missing = [\"task_reference\"]\n\n   5.4) DELETE:\n\n       Examples:\n         \"delete 2\"\n         \"remove task 1\"\n         \"remove the third task\"\n\n       - If the message contains the word \"delete\" / \"remove\" (or similar)\n         AND you can identify which task from the message:\n         - route = \"process\"\n         - action = \"delete\"\n         - args[0] = task reference as string\n         - missing = []\n\n       - If the user sends ONLY a digit like \"4\" (without verbs) or just the word \"delete\":\n         - route = \"ask_information\"\n         - action = \"delete\"\n         - args = []\n         - missing = [\"task_reference\"]\n\n   5.5) LINK:\n\n       Examples:\n         \"link ABC123\"\n         \"5\"\n         \"link code XYZ789\"\n\n       - If you can extract a code:\n         - route = \"process\"\n         - action = \"link\"\n         - args[0] = code (e.g. \"ABC123\")\n         - missing = []\n\n       - If the user only sends \"5\" (option for link) or \"link\" without code:\n         - route = \"ask_information\"\n         - action = \"link\"\n         - args = []\n         - missing = [\"link_code\"]\n\n6) If you cannot confidently determine any valid action:\n   - If user seems to ask \"what can I do\", prefer:\n     route = \"menu\", action = null, args = [], missing = []\n   - Otherwise:\n     route = \"ignore\", action = null, args = [], missing = []\n\nOutput ONLY a single JSON object.\nDo NOT wrap it in quotes.\nDo NOT wrap it in markdown.\nDo NOT add explanations or any other text."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        1680,
+        32
+      ],
+      "id": "6939e713-428b-45ca-9acd-cef1bc57954b",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('get_profile').first().json.data.phone }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1840,
+        256
+      ],
+      "id": "96311109-c794-4e31-8256-23c69721c590",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $node['normalize_incoming'].json || {};\nconst phone = incoming.remoteJidFull || incoming.phone;\n\n// Helper seguro\nfunction safeJson(nodeName) {\n  try {\n    const n = $node[nodeName];\n    return n ? n.json : null;\n  } catch (e) {\n    return null;\n  }\n}\n\n// Dados vindos do parse_message\nconst route      = $json.route;   // process | ask_information | ...\nconst action     = $json.action;  // new | list | complete | delete | link | null\nconst missing    = Array.isArray($json.missing) ? $json.missing : [];\nconst rawMessage = $json.rawMessage;\n\n// Nodes HTTP (só farão sentido quando route = \"process\")\nconst createJson   = safeJson('Create_Task');\nconst listJson     = safeJson('List_Tasks');\nconst completeJson = safeJson('Complete_Task');\nconst deleteJson   = safeJson('Delete_Task');\nconst linkJson     = safeJson('Link_Account');\n\n// Status global de link – vem de link_flag ou check_link_status1\nconst linkStatusJson = safeJson('link_flag') || safeJson('check_link_status1') || $json.linkStatus || null;\n\nconst created =\n  createJson && createJson.data\n    ? (createJson.data.task || createJson.data)\n    : null;\n\nconst tasks =\n  listJson && Array.isArray(listJson.data)\n    ? listJson.data\n    : [];\n\nconst completed = completeJson || null;\nconst deleted   = deleteJson   || null;\n\n// Prioriza o resultado da ação de link; se não tiver, usa o status global\nlet linkResult = linkJson || null;\n\nif (!linkResult && linkStatusJson) {\n  linkResult = linkStatusJson;\n}\n\n// Define type e contexto pro AI_Response\nlet type = 'result';\nlet context = {\n  createdTask: created,\n  tasks,\n  completed,\n  deleted,\n  linkResult,\n};\n\n// Para ask_information, mantém pelo menos linkResult no contexto\nif (route === 'ask_information') {\n  type = 'ask_information';\n  context = { linkResult };\n}\n\nreturn {\n  json: {\n    phone,\n    type,        // \"result\" ou \"ask_information\"\n    action,\n    context,\n    missing,\n    rawMessage,\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4816,
+        80
+      ],
+      "id": "f9484a19-3e9a-4b33-9589-6af260a01ce0",
+      "name": "AI_context_code"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ { \"action\": $json.action, \"context\": $json.context } }}",
+        "options": {
+          "systemMessage": "You are the response formatter for a WhatsApp task manager bot (TaskFlow).\nYou MUST answer with a single JSON object and NOTHING else.\n\nInput JSON:\n{\n\"type\": \"result\" | \"ask_information\",\n\"action\": \"new\" | \"list\" | \"complete\" | \"delete\" | \"link\",\n\"context\": { ... }, // only for type = \"result\"\n\"missing\": string[], // only for type = \"ask_information\"\n\"rawMessage\": string // original user message\n}\n\nThe context object may contain:\n\ncreatedTask: { id, title, isCompleted, ... } | null\n\ntasks: array of tasks\n\ncompleted: any\n\ndeleted: any\n\nlinkResult: any (may include fields like success, linked, or linked === true)\n\nOutput JSON:\n{\n\"messages\": string[]\n}\n\nABSOLUTE RULE ABOUT LINK STATUS (VERY IMPORTANT):\n\nIf context.linkResult exists AND (context.linkResult.linked === true OR context.linkResult.success === true),\nYOU MUST NEVER ask the user to send a link code or show any text suggesting that the WhatsApp is not linked.\nIn this case, you MUST always answer as if the WhatsApp is already linked.\n\nGENERAL RULES:\n\nAll messages must be ready to send on WhatsApp, using bold and emojis.\n\nWhen type = \"result\", you may return 1 or 2 messages.\n\nWhen type = \"ask_information\", you MUST return EXACTLY ONE message (messages.length = 1).\n\nMENU TEXT (DYNAMIC):\n\nYou must choose the menu text based on the link status:\n\nIf context.linkResult exists AND (context.linkResult.linked === true OR context.linkResult.success === true):\nThen the menu is:\n\n\"What would you like to do?\\n\\n\" +\n\"1️⃣ Create a Task\\n\" +\n\"2️⃣ List Tasks\\n\" +\n\"3️⃣ Mark a Task as Completed\\n\" +\n\"4️⃣ Delete a Task\\n\" +\n\"0️⃣ Exit\"\n\nOtherwise (no linkResult, or it does NOT indicate linked):\nThe menu is:\n\n\"What would you like to do?\\n\\n\" +\n\"1️⃣ Create a Task\\n\" +\n\"2️⃣ List Tasks\\n\" +\n\"3️⃣ Mark a Task as Completed\\n\" +\n\"4️⃣ Delete a Task\\n\" +\n\"5️⃣ Link WhatsApp to Web App\\n\" +\n\"0️⃣ Exit\"\n\nIn the instructions below, whenever you see the word “menu”, you must use the appropriate version based on the rule above.\n\nTYPE = \"result\":\n\naction = \"new\":\n\nIf context.createdTask exists and has a title field:\nmessages = [\n\"✅ Task created: \"TITLE\"\",\nmenu\n]\n\nOtherwise:\nmessages = [\n\"✅ Task created.\",\nmenu\n]\n\naction = \"list\":\n\nIf context.tasks is empty:\nmessages = [\n\"No tasks found.\",\nmenu\n]\n\nElse:\nmessages = [\nformatted list,\nmenu\n]\n\nThe formatted list MUST be:\n\n\"Your Tasks (N):\\n\\n\" +\n\"1️⃣\\nid: ID_1\\nName: TITLE_1\\nStatus: open|done\\n\\n\" +\n\"2️⃣\\nid: ID_2\\nName: TITLE_2\\nStatus: open|done\\n\\n\" +\n\"3️⃣\\nid: ID_3\\nName: TITLE_3\\nStatus: open|done\\n...\"\n\nNumber tasks starting from 1.\nUse status \"done\" when the task is completed, otherwise \"open\".\nThe id field MUST be the exact database id from context.tasks[i].id.\n\naction = \"complete\":\n\nmessages should confirm completion, for example:\n\"✅ Task completed.\" or \"✅ Task marked as done.\"\n\nUse context.completed or rawMessage if needed, but keep it short.\nAlways add the menu as the second message.\n\nmessages = [\nconfirmation message,\nmenu\n]\n\naction = \"delete\":\n\nmessages should confirm deletion, for example:\n\"🗑️ Task deleted.\" or \"🗑️ Task removed.\"\n\nUse context.deleted or rawMessage if needed, but keep it short.\nAlways add the menu as the second message.\n\nmessages = [\nconfirmation message,\nmenu\n]\n\naction = \"link\":\n\nYou must interpret context.linkResult.\n\nIf context.linkResult exists AND (context.linkResult.linked === true OR context.linkResult.success === true):\nThis means the WhatsApp is already linked.\nYou MUST NOT ask for any link code in this case.\n\nmessages = [\n\"✅ Your WhatsApp is already linked to the web app.\",\n// After a successful/confirmed link, you MUST use the menu WITHOUT option 5.\n\"What would you like to do?\\n\\n\" +\n\"1️⃣ Create a Task\\n\" +\n\"2️⃣ List Tasks\\n\" +\n\"3️⃣ Mark a Task as Completed\\n\" +\n\"4️⃣ Delete a Task\\n\" +\n\"0️⃣ Exit\"\n]\n\nOtherwise, if context.linkResult exists and clearly indicates failure:\nmessages = [\n\"⚠️ Invalid or expired link code. Please check the code and try again.\",\n// On failure, keep showing the menu WITH option 5.\n\"What would you like to do?\\n\\n\" +\n\"1️⃣ Create a Task\\n\" +\n\"2️⃣ List Tasks\\n\" +\n\"3️⃣ Mark a Task as Completed\\n\" +\n\"4️⃣ Delete a Task\\n\" +\n\"5️⃣ Link WhatsApp to Web App\\n\" +\n\"0️⃣ Exit\"\n]\n\nTYPE = \"ask_information\":\n\nYou must ask the user for missing details based on \"missing\" and \"action\".\n\nDo NOT pretend that the action was executed.\n\nFor type = \"ask_information\", you MUST return exactly one message in the \"messages\" array.\n\nDO NOT include the menu when type = \"ask_information\".\nDO NOT add any extra messages beyond the question for missing information.\n\nIf \"title\" is in missing:\n\naction = \"new\":\nmessages = [\n\"You want to create a task. Please send the task name.\"\n]\n\nIf \"task_reference\" is in missing:\n\naction = \"complete\":\nmessages = [\n\"You want to complete a task. Please send the task id exactly as shown in the list. You can copy and paste the id here so I can proceed.\"\n]\n\naction = \"delete\":\nmessages = [\n\"You want to delete a task. Please send the task id exactly as shown in the list. You can copy and paste the id here so I can proceed.\"\n]\n\nIf \"link_code\" is in missing:\n\naction = \"link\":\n\nIf context.linkResult exists AND (context.linkResult.linked === true OR context.linkResult.success === true):\nYOU MUST NOT ask for the link code.\nYou MUST answer:\n\nmessages = [\n\"✅ Your WhatsApp is already connected to the web app. You can keep managing your tasks normally.\"\n]\n\nOtherwise (not linked, or no evidence of success):\nmessages = [\n\"To link your WhatsApp, please send the link code shown in the web app.\"\n]\n\nNever output markdown code fences or explanations. Only output the JSON with the \"messages\" field."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        5024,
+        80
+      ],
+      "id": "849238f7-933e-4028-a05e-6fb92512e8e0",
+      "name": "AI_Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $node['normalize_incoming'].json || {};\nconst phone = incoming.remoteJidFull || incoming.phone;\n\nlet out = $input.item.json;\n\n// se vier como { output: \"...\" }\nif (out && typeof out.output === 'string') {\n  try {\n    out = JSON.parse(out.output);\n  } catch (e) {\n    out = {};\n  }\n}\n\nconst messages = Array.isArray(out.messages) ? out.messages : [];\n\nif (!messages.length) {\n  return [\n    {\n      json: {\n        phone,\n        text: 'Something went wrong formatting the response.',\n      },\n    },\n  ];\n}\n\nreturn messages.map((text) => ({\n  json: {\n    phone,\n    text,\n  },\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5376,
+        80
+      ],
+      "id": "60d32aec-b54b-4716-9a17-57562a75a035",
+      "name": "split_messages"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('get_or_create_profile').first().json.data[0].user_phone }}",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        5040,
+        288
+      ],
+      "id": "5fd2803c-209e-4831-a6cf-8d6a8e9e1adf",
+      "name": "Simple Memory1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1696,
+        256
+      ],
+      "id": "c56e449e-c054-4e59-a3b8-96be0f82b996",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "6oGCaUeYhfzxbei4",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        4896,
+        288
+      ],
+      "id": "aebd4949-9de1-4d1c-9aab-5f42073c7e5d",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "6oGCaUeYhfzxbei4",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $node['normalize_incoming'].json || {};\nconst phone = incoming.remoteJidFull || incoming.phone;\n\nconst action  = $json.action;                          // \"new\" | \"complete\" | \"delete\" | \"link\"\nconst missing = Array.isArray($json.missing) ? $json.missing : [];\nconst rawMessage = $json.rawMessage || '';\n\nreturn {\n  json: {\n    phone,\n    type: 'ask_information',  // crítico para o AI_Response\n    action,\n    missing,                  // ex.: [\"task_reference\"]\n    rawMessage,\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2592,
+        672
+      ],
+      "id": "3b164f0c-24ef-40f6-83fb-7c92cb89bb7c",
+      "name": "AI_content_ask"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1cb52576-d2e9-40d4-a801-32e3e0331ab1",
+              "leftValue": "={{ $json.data.description }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4176,
+        -288
+      ],
+      "id": "3d5e8b12-f9b4-406a-8933-01568455405a",
+      "name": "description_note_null"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "SlcNmK27I00YCKtM",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/SlcNmK27I00YCKtM",
+          "cachedResultName": "Description_Enrich"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        4352,
+        -400
+      ],
+      "id": "bb4ddfcb-3693-42d9-8302-d1ec371bf2bf",
+      "name": "Call 'Description_Enrich'"
+    },
+    {
+      "parameters": {
+        "url": "=https://task-flow-bruno-c.vercel.app/api/link?phone={{$('normalize_incoming').item.json.remoteJid}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1008,
+        32
+      ],
+      "id": "dd53cda1-cd6b-4f22-9751-d2bbee3b0f36",
+      "name": "check_link_status1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "normalize_incoming",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse_message": {
+      "main": [
+        [
+          {
+            "node": "Switch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Create_Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "List_Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Complete_Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete_Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Link_Account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete_Task": {
+      "main": [
+        [
+          {
+            "node": "AI_context_code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete_Task": {
+      "main": [
+        [
+          {
+            "node": "AI_context_code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List_Tasks": {
+      "main": [
+        [
+          {
+            "node": "AI_context_code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create_Task": {
+      "main": [
+        [
+          {
+            "node": "description_note_null",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch1": {
+      "main": [
+        [
+          {
+            "node": "create_session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "deactivate_session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "menu_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI_content_ask",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create_session": {
+      "main": [
+        [
+          {
+            "node": "starting_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "starting_message": {
+      "main": [
+        [
+          {
+            "node": "Send_Message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "deactivate_message": {
+      "main": [
+        [
+          {
+            "node": "Send_Message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send_Message2": {
+      "main": [
+        []
+      ]
+    },
+    "Send_Message1": {
+      "main": [
+        []
+      ]
+    },
+    "Send_Message": {
+      "main": [
+        []
+      ]
+    },
+    "deactivate_session": {
+      "main": [
+        [
+          {
+            "node": "deactivate_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_session": {
+      "main": [
+        [
+          {
+            "node": "check_link_status1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_incoming": {
+      "main": [
+        [
+          {
+            "node": "check_session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_link_status": {
+      "main": [
+        [
+          {
+            "node": "not_linked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "not_linked": {
+      "main": [
+        [
+          {
+            "node": "prepare_link",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI_context_code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare_link": {
+      "main": [
+        [
+          {
+            "node": "Send_Message3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send_Message3": {
+      "main": [
+        []
+      ]
+    },
+    "Link_Account": {
+      "main": [
+        [
+          {
+            "node": "AI_context_code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "menu_message": {
+      "main": [
+        [
+          {
+            "node": "Send_Message4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_or_create_profile": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_profile_link_code": {
+      "main": [
+        [
+          {
+            "node": "check_link_status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_profile": {
+      "main": [
+        [
+          {
+            "node": "get_or_create_profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "parse_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI_context_code": {
+      "main": [
+        [
+          {
+            "node": "AI_Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI_Response": {
+      "main": [
+        [
+          {
+            "node": "split_messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI_Response",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "split_messages": {
+      "main": [
+        [
+          {
+            "node": "Send_Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI_Response",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI_content_ask": {
+      "main": [
+        [
+          {
+            "node": "AI_context_code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "description_note_null": {
+      "main": [
+        [
+          {
+            "node": "Call 'Description_Enrich'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "get_profile_link_code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Description_Enrich'": {
+      "main": [
+        [
+          {
+            "node": "get_profile_link_code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_link_status1": {
+      "main": [
+        [
+          {
+            "node": "get_profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "01af3acc-e501-473e-95ef-aab268045864",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "65535a2010b4ec8a66ed672cf797357a43404fb2cc7e332660a812007c295aa1"
+  },
+  "id": "TRs8bSgLCBLu2bLG",
+  "tags": []
+}
