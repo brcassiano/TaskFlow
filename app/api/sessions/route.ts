@@ -7,19 +7,11 @@ function normalizePhone(input?: string | null): string | null {
   return p.includes('@s.whatsapp.net') ? p : `${p}@s.whatsapp.net`;
 }
 
-function assertSecret(req: NextRequest) {
-  const required = process.env.TASKFLOW_API_SECRET;
-  if (!required) return null;
-
-  const got = req.headers.get('x-taskflow-secret');
-  if (!got || got !== required) {
-    return NextResponse.json(
-      { success: false, error: 'Unauthorized' },
-      { status: 401 },
-    );
-  }
+function assertSecret(_req: NextRequest) {
+  // MVP: no auth. In production, enable x-taskflow-secret check here.
   return null;
 }
+
 
 // GET /api/sessions?phone=xxxx@s.whatsapp.net
 export async function GET(request: NextRequest) {
@@ -76,7 +68,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       user_phone: phone,
       is_active: true,
       last_interaction: new Date().toISOString(),

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import TaskItem from './TaskItem';
+import ConfirmModal from './ConfirmModal';
 import type { Task } from '@/types';
 
 interface TaskListProps {
@@ -23,10 +24,14 @@ export default function TaskList({
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
 
+  // seleção para bulk delete
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   async function loadTasks() {
     setLoading(true);
     setError('');
-
     try {
       const res = await fetch(
         `/api/tasks?userId=${encodeURIComponent(userId)}`,
@@ -37,6 +42,7 @@ export default function TaskList({
         const tasksList = json.data as Task[];
         setTasks(tasksList);
         onTasksLoaded(tasksList.length);
+        setSelectedIds([]);
       } else {
         setError(json.error || 'Failed to load tasks');
       }
@@ -59,8 +65,8 @@ export default function TaskList({
     if (!userId) return;
 
     const supabase = createBrowserClient();
-
     console.log('Subscribing to realtime changes...');
+
     const channel = supabase
       .channel('tasks-changes')
       .on(
@@ -73,7 +79,6 @@ export default function TaskList({
         },
         (payload) => {
           console.log('Realtime event:', payload);
-
           if (payload.eventType === 'INSERT') {
             setTasks((prev) => [payload.new as Task, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
@@ -85,6 +90,9 @@ export default function TaskList({
           } else if (payload.eventType === 'DELETE') {
             setTasks((prev) =>
               prev.filter((task) => task.id !== payload.old.id),
+            );
+            setSelectedIds((prev) =>
+              prev.filter((id) => id !== payload.old.id),
             );
           }
         },
@@ -100,19 +108,18 @@ export default function TaskList({
   if (loading) {
     return (
       <div className="text-center py-12">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-        <p className="mt-4 text-gray-600">Loading tasks...</p>
+        <p className="text-gray-500">Loading tasks...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">
-        <p className="font-medium">{error}</p>
+      <div className="text-center py-12">
+        <p className="text-red-500 mb-4">{error}</p>
         <button
           onClick={loadTasks}
-          className="mt-2 text-sm underline hover:no-underline"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           Try again
         </button>
@@ -129,45 +136,122 @@ export default function TaskList({
   const pendingCount = tasks.filter((t) => !t.is_completed).length;
   const completedCount = tasks.filter((t) => t.is_completed).length;
 
+  const showBulkControls = filteredTasks.length > 1;
+  const selectAllActive =
+    showBulkControls &&
+    selectedIds.length > 0 &&
+    selectedIds.length === filteredTasks.length;
+
+  function toggleSelect(taskId: string) {
+    setSelectedIds((prev) =>
+      prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId],
+    );
+  }
+
+  function handleToggleSelectAll() {
+    if (!showBulkControls) return;
+
+    if (selectAllActive) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredTasks.map((t) => t.id));
+    }
+  }
+
+  async function handleConfirmBulkDelete() {
+    if (selectedIds.length === 0) {
+      setShowBulkDeleteModal(false);
+      return;
+    }
+
+    setBulkDeleting(true);
+    try {
+      const res = await fetch('/api/tasks/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          ids: selectedIds,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Failed to delete selected tasks');
+      } else {
+        setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.id)));
+        setSelectedIds([]);
+        onTaskUpdated();
+      }
+    } catch (err) {
+      console.error('Bulk delete error:', err);
+      alert('Connection error');
+    } finally {
+      setBulkDeleting(false);
+      setShowBulkDeleteModal(false);
+    }
+  }
+
   return (
-    <div>
-      {/* Statistics - Unified with filters */}
-      <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
-        <div className="flex items-center gap-3">
-          {/* Filters with counters - Left side only */}
-          <div className="flex gap-2">
+    <div className="space-y-4">
+      {/* Filtro + estatísticas + bulk actions */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        {/* Filtros */}
+        <div className="inline-flex rounded-lg bg-gray-100 p-1">
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              filter === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            All {tasks.length}
+          </button>
+          <button
+            onClick={() => setFilter('pending')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              filter === 'pending'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Pending {pendingCount}
+          </button>
+          <button
+            onClick={() => setFilter('completed')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              filter === 'completed'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Completed {completedCount}
+          </button>
+        </div>
+
+        {/* Bulk actions */}
+        {showBulkControls && (
+          <div className="flex items-center gap-3 text-sm">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="w-4 h-4"
+                checked={selectAllActive}
+                onChange={handleToggleSelectAll}
+              />
+              <span className="text-gray-700">Select all</span>
+            </label>
+
             <button
-              onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === 'all'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              onClick={() => setShowBulkDeleteModal(true)}
+              disabled={selectedIds.length === 0}
+              className="px-3 py-1.5 rounded-lg bg-red-600 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-700 text-xs font-medium"
             >
-              All {tasks.length}
-            </button>
-            <button
-              onClick={() => setFilter('pending')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === 'pending'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Pending {pendingCount}
-            </button>
-            <button
-              onClick={() => setFilter('completed')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === 'completed'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Completed {completedCount}
+              Delete selected ({selectedIds.length})
             </button>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Task list */}
@@ -196,10 +280,25 @@ export default function TaskList({
               task={task}
               onUpdate={onTaskUpdated}
               onDelete={onTaskUpdated}
+              bulkSelectable={showBulkControls}
+              selectAllActive={selectAllActive}
+              selected={selectedIds.includes(task.id)}
+              onToggleSelect={() => toggleSelect(task.id)}
             />
           ))}
         </div>
       )}
+
+      {/* Bulk delete modal reutilizando ConfirmModal */}
+      <ConfirmModal
+        isOpen={showBulkDeleteModal}
+        title="Delete Tasks"
+        message={`Delete ${selectedIds.length} selected task(s)? This action cannot be undone.`}
+        confirmText={bulkDeleting ? 'Deleting...' : 'Delete'}
+        cancelText="Cancel"
+        onConfirm={handleConfirmBulkDelete}
+        onCancel={() => setShowBulkDeleteModal(false)}
+      />
     </div>
   );
 }

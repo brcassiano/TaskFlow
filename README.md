@@ -444,6 +444,95 @@ Body:
   "text": "={{ $json.message }}"
 }
 ```
+
+## 📡 REST API Documentation
+
+### Endpoints
+
+#### GET /api/tasks
+
+List all tasks for a user.
+
+**Query Parameters:**
+
+- `userId` (required): UUID of the user (matches `profiles.id` in Supabase)
+
+**Example:**
+
+curl "https://your-app.vercel.app/api/tasks?userId=YOUR_USER_ID"
+
+
+**Response:**
+
+{
+"success": true,
+"data": [
+{
+"id": "uuid",
+"user_id": "uuid",
+"title": "Task title",
+"description": "Optional description",
+"is_completed": false,
+"created_at": "2025-12-17T...",
+"updated_at": "2025-12-17T..."
+}
+]
+}
+
+#### POST /api/tasks
+
+Create a new task.
+
+**Body:**
+
+{
+"userId": "uuid",
+"title": "Task title",
+"description": "Optional description"
+}
+
+> For backward compatibility, `{ "user_id": "uuid" }` is also accepted, but `userId` is preferred.
+
+**Example:**
+
+curl -X POST https://your-app.vercel.app/api/tasks
+-H "Content-Type: application/json"
+-d '{"userId":"YOUR_USER_ID","title":"Buy milk"}'
+
+
+#### PATCH /api/tasks/:id
+
+Update a task (mark as completed, change title, etc).
+
+**Body:**
+
+{
+"userId": "uuid",
+"is_completed": true,
+"title": "Updated title"
+}
+
+> Also accepts `isCompleted` or `iscompleted` from legacy clients.
+
+**Example:**
+
+curl -X PATCH https://your-app.vercel.app/api/tasks/TASK_ID
+-H "Content-Type: application/json"
+-d '{"userId":"YOUR_USER_ID","is_completed":true}'
+
+
+#### DELETE /api/tasks/:id
+
+Delete a task permanently.
+
+**Query Parameters:**
+
+- `userId` (required): UUID of the user
+
+**Example:**
+
+curl -X DELETE "https://your-app.vercel.app/api/tasks/TASK_ID?userId=YOUR_USER_ID"
+
 ### WhatsApp Commands
 
 Activate it on WhatsApp with the command:

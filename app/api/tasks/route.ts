@@ -41,9 +41,34 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // Compat: aceita { userId } ou { user_id }
+    const userId = body.userId ?? body.user_id;
+    const title = body.title;
+    const description = body.description ?? null;
+
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'userId is required' },
+        { status: 400 },
+      );
+    }
+
+    if (!title || typeof title !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'title is required' },
+        { status: 400 },
+      );
+    }
+
+    const insertPayload = {
+      user_id: userId,
+      title,
+      description,
+    };
+
     const { data, error } = await supabase
       .from('tasks')
-      .insert(body)
+      .insert(insertPayload)
       .select()
       .single();
 

@@ -1,10 +1,11 @@
+// components/TaskForm.tsx
 'use client';
 
 import { useState } from 'react';
 
 interface TaskFormProps {
   userId: string;
-  onTaskCreated: () => void;
+  onTaskCreated: (taskId: string) => void;
 }
 
 export default function TaskForm({ userId, onTaskCreated }: TaskFormProps) {
@@ -39,13 +40,17 @@ export default function TaskForm({ userId, onTaskCreated }: TaskFormProps) {
 
       const data = await res.json();
 
-      if (res.ok) {
+      if (res.ok && data?.data?.id) {
+        const taskId: string = data.data.id;
+
         setTitle('');
         setDescription('');
         setShowDescription(false);
         setError('');
         setIsOpen(false);
-        onTaskCreated();
+
+        // agora o pai recebe o UUID criado
+        onTaskCreated(taskId);
       } else {
         setError(data.error || 'Failed to create task');
       }

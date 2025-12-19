@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 
 function getIdFromUrl(url: string): string | null {
   const u = new URL(url);
-  const parts = u.pathname.split('/');
+  const parts = u.pathname.split('/'); // ['', 'api', 'tasks', '{id}']
   return parts[3] ?? null;
 }
 
@@ -11,6 +11,7 @@ function getIdFromUrl(url: string): string | null {
 export async function PATCH(request: NextRequest) {
   try {
     const id = getIdFromUrl(request.url);
+
     if (!id) {
       return NextResponse.json(
         { success: false, error: 'id is required in URL' },
@@ -21,30 +22,45 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     console.log('PATCH /api/tasks/[id] - id, body:', id, body);
 
-    if (!body.user_id) {
+    // Compat: userId ou user_id
+    const userId = body.userId ?? body.user_id;
+    if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'user_id is required' },
+        { success: false, error: 'userId is required' },
         { status: 400 },
       );
     }
 
-    // Converter camelCase para snake_case
-    const updateData: Record<string, any> = {};
-    
+    const updateData: Record<string, unknown> = {};
+
     if (body.title !== undefined) updateData.title = body.title;
     if (body.description !== undefined) updateData.description = body.description;
-    if (body.is_completed !== undefined) updateData.is_completed = body.is_completed;
-    if (body.isCompleted !== undefined) updateData.is_completed = body.isCompleted; // camelCase fallback
-    
-    if (!updateData.updated_at) {
-      updateData.updated_at = new Date().toISOString();
+
+    // Normaliza is_completed
+    if (body.is_completed !== undefined) {
+      updateData.is_completed = body.is_completed;
     }
+    if (body.isCompleted !== undefined) {
+      updateData.is_completed = body.isCompleted;
+    }
+    if (body.iscompleted !== undefined) {
+      updateData.is_completed = body.iscompleted;
+    }
+
+    if (!Object.keys(updateData).length) {
+      return NextResponse.json(
+        { success: false, error: 'No fields to update' },
+        { status: 400 },
+      );
+    }
+
+    updateData.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase
       .from('tasks')
       .update(updateData)
       .eq('id', id)
-      .eq('user_id', body.user_id)
+      .eq('user_id', userId)
       .select()
       .single();
 
@@ -81,6 +97,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const id = getIdFromUrl(request.url);
+
     if (!id) {
       return NextResponse.json(
         { success: false, error: 'id is required in URL' },
@@ -89,7 +106,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const searchParams = new URL(request.url).searchParams;
-    const userId = searchParams.get('userId');
+    const userId = searchParams.get('userId') ?? searchParams.get('user_id');
 
     console.log('DELETE /api/tasks/[id] - id, userId:', id, userId);
 
@@ -129,6 +146,7 @@ export async function DELETE(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const id = getIdFromUrl(request.url);
+
     if (!id) {
       return NextResponse.json(
         { success: false, error: 'id is required in URL' },
@@ -137,7 +155,7 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = new URL(request.url).searchParams;
-    const userId = searchParams.get('userId');
+    const userId = searchParams.get('userId') ?? searchParams.get('user_id');
 
     console.log('GET /api/tasks/[id] - id, userId:', id, userId);
 

@@ -1,279 +1,362 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import TaskForm from '@/components/TaskForm';
-import TaskList from '@/components/TaskList';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import type { Task, ApiResponse } from '@/types';
 
-export default function DashboardClient() {
+interface DashboardClientProps {
+  userId: string;
+}
+
+type Filter = 'all' | 'open' | 'done';
+
+export default function DashboardClient({ userId }: DashboardClientProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [userId, setUserId] = useState<string>('');
-  const [linkCode, setLinkCode] = useState<string>('');
-  const [isLinked, setIsLinked] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [taskCount, setTaskCount] = useState(0);
-  const [showLinkModal, setShowLinkModal] = useState(false);
-  const [showBanner, setShowBanner] = useState(false);
-  const [bannerShown, setBannerShown] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const WHATSAPP_NUMBER = '5511984872770';
+  // Link code opcional: pode vir da URL (?linkCode=XXXX) ou ser gerado no backend
+  const linkCodeFromUrl = searchParams.get('linkCode') ?? '';
 
-  useEffect(() => {
-    initializeUser();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  // Carrega tasks via API
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-  useEffect(() => {
-    console.log('useEffect: userId changed to:', userId);
+      const res = await fetch(`/api/tasks?userId=${encodeURIComponent(userId)}`);
+      const json = (await res.json()) as ApiResponse<Task[]>;
 
-    if (userId && userId.startsWith('guest-')) {
-      console.log('Guest user - checking if link already exists');
-      checkLinkStatus();
-    } else if (userId && !userId.startsWith('guest-')) {
-      console.log('Non-guest user, setting as linked');
-      setIsLinked(true);
+      if (!json.success || !json.data) {
+        setError(json.error ?? 'Failed to load tasks');
+        setTasks([]);
+        return;
+      }
+
+      setTasks(json.data);
+    } catch {
+      setError('Failed to load tasks');
+      setTasks([]);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  // Show banner ONLY quando: não está linkado, tem 1+ tasks, é a primeira vez e não foi mostrado ainda
-  useEffect(() => {
-    if (!isLinked && taskCount > 0 && !bannerShown && linkCode) {
-      console.log('Showing banner - first time with tasks');
-      setShowBanner(true);
-      setBannerShown(true);
-      localStorage.setItem(`taskflow_banner_shown_${userId}`, 'true');
-    }
-  }, [taskCount, isLinked, linkCode, bannerShown, userId]);
+  // Stats
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const done = tasks.filter((t) => t.is_completed).length;
+    const open = total - done;
+    const completion = total === 0 ? 0 : Math.round((done / total) * 100);
+    return { total, done, open, completion };
+  }, [tasks]);
 
-  async function checkLinkStatus() {
+  // Lista filtrada
+  const filteredTasks = useMemo(() => {
+    if (filter === 'all') return tasks;
+    if (filter === 'open') return tasks.filter((t) => !t.is_completed);
+    return tasks.filter((t) => t.is_completed);
+  }, [tasks, filter]);
+
+  // Criar task
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+
     try {
-      console.log('checkLinkStatus: Checking link status for phone:', userId);
-      const res = await fetch(`/api/link?phone=${encodeURIComponent(userId)}`);
-      const data = await res.json();
+      setCreating(true);
+      setError(null);
 
-      console.log('checkLinkStatus: Link status response:', data);
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          title: title.trim(),
+          description: description.trim() || undefined,
+        }),
+      });
 
-      const linked = data.data && Array.isArray(data.data) && data.data.length > 0;
-      console.log('checkLinkStatus: Is linked:', linked);
+      const json = (await res.json()) as ApiResponse<Task>;
 
-      if (linked) {
-        const linkedPhoneNumber = data.data[0].phone;
-        console.log('User was linked to phone:', linkedPhoneNumber);
-
-        localStorage.setItem('taskflow_user_id', linkedPhoneNumber);
-        localStorage.setItem('taskflow_linked', 'true');
-        setUserId(linkedPhoneNumber);
-        setIsLinked(true);
-      } else {
-        console.log('User is still a guest');
-        setIsLinked(false);
-      }
-
-      localStorage.setItem('taskflow_linked', linked ? 'true' : 'false');
-    } catch (err) {
-      console.error('checkLinkStatus: Error checking link status:', err);
-      setIsLinked(false);
-    }
-  }
-
-  function initializeUser() {
-    try {
-      console.log('initializeUser: called');
-
-      const phoneParam = searchParams.get('phone');
-      console.log('initializeUser: phoneParam:', phoneParam);
-
-      if (phoneParam) {
-        const formattedPhone = phoneParam.includes('@s.whatsapp.net')
-          ? phoneParam
-          : `${phoneParam}@s.whatsapp.net`;
-
-        console.log('initializeUser: Set userId to phone:', formattedPhone);
-        localStorage.setItem('taskflow_user_id', formattedPhone);
-        localStorage.setItem('taskflow_linked', 'true');
-        setUserId(formattedPhone);
-        setIsLinked(true);
-        setIsLoading(false);
+      if (!json.success || !json.data) {
+        setError(json.error ?? 'Failed to create task');
         return;
       }
 
-      const savedUserId = localStorage.getItem('taskflow_user_id');
-      const savedLinked = localStorage.getItem('taskflow_linked') === 'true';
+      setTitle('');
+      setDescription('');
+      setTasks((prev) => [json.data!, ...prev]);
+    } catch {
+      setError('Failed to create task');
+    } finally {
+      setCreating(false);
+    }
+  };
 
-      console.log('initializeUser: savedUserId:', savedUserId, 'savedLinked:', savedLinked);
+  // Toggle complete
+  const handleToggleComplete = async (task: Task) => {
+    try {
+      setError(null);
 
-      if (savedUserId) {
-        setUserId(savedUserId);
-        setIsLinked(savedLinked);
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          is_completed: !task.is_completed,
+        }),
+      });
 
-        // Verificar se o banner já foi mostrado para este usuário
-        const bannerWasShown = localStorage.getItem(`taskflow_banner_shown_${savedUserId}`) === 'true';
-        setBannerShown(bannerWasShown);
+      const json = (await res.json()) as ApiResponse<Task>;
 
-        if (savedUserId.startsWith('guest-') && !savedLinked) {
-          const code = savedUserId.slice(-8);
-          setLinkCode(code.toUpperCase());
-        }
-
-        setIsLoading(false);
+      if (!json.success || !json.data) {
+        setError(json.error ?? 'Failed to update task');
         return;
       }
 
-      const guestId = `guest-${crypto.randomUUID()}`;
-      const code = guestId.slice(-8);
-
-      console.log('initializeUser: Set userId to guest:', guestId);
-      localStorage.setItem('taskflow_user_id', guestId);
-      localStorage.setItem('taskflow_linked', 'false');
-      setUserId(guestId);
-      setIsLinked(false);
-      setLinkCode(code.toUpperCase());
-      setBannerShown(false); // Reset banner flag para novo usuário
-      setIsLoading(false);
-    } catch (error) {
-      console.error('initializeUser: Error initializing user:', error);
-      setIsLoading(false);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? json.data! : t)),
+      );
+    } catch {
+      setError('Failed to update task');
     }
-  }
+  };
 
-  function handleTaskCreated() {
-    setRefreshKey((prev) => prev + 1);
-  }
+  // Delete
+  const handleDeleteTask = async (task: Task) => {
+    try {
+      setError(null);
 
-  function handleTaskUpdated() {
-    setRefreshKey((prev) => prev + 1);
-  }
+      const url = `/api/tasks/${task.id}?userId=${encodeURIComponent(userId)}`;
+      const res = await fetch(url, { method: 'DELETE' });
 
-  function handleTasksLoaded(count: number) {
-    setTaskCount(count);
-  }
+      const json = (await res.json()) as ApiResponse<string>;
 
-  function closeBanner() {
-    setShowBanner(false);
-  }
+      if (!json.success) {
+        setError(json.error ?? 'Failed to delete task');
+        return;
+      }
 
-  function getWhatsAppLink() {
-    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
-      `#to-do-list link ${linkCode}`
-    )}`;
-  }
+      setTasks((prev) => prev.filter((t) => t.id !== task.id));
+    } catch {
+      setError('Failed to delete task');
+    }
+  };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4" />
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  // Short id para UX / WhatsApp
+  const getShortId = (id: string) => id.split('-')[0];
+
+  const linkCode = linkCodeFromUrl || 'YOUR_LINK_CODE';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <header className="mb-8 text-center relative">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">📝 TaskFlow</h1>
-          <p className="text-gray-600">Organize your tasks simply and efficiently</p>
+    <div className="mx-auto flex max-w-4xl flex-col gap-6 p-4">
+      {/* Header */}
+      <header className="flex flex-col gap-2 border-b pb-4">
+        <h1 className="text-2xl font-bold">TaskFlow</h1>
+        <p className="text-sm text-gray-600">
+          Simple to-do list with Supabase, Next.js and WhatsApp integration.
+        </p>
+      </header>
 
-          {!isLinked && linkCode && (
+      {/* Status / Errors */}
+      {error && (
+        <div className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+      {loading && (
+        <div className="rounded border border-gray-200 bg-gray-50 p-2 text-sm">
+          Loading tasks...
+        </div>
+      )}
+
+      {/* Stats */}
+      <section className="grid gap-3 rounded border border-gray-200 bg-white p-4 sm:grid-cols-4">
+        <div>
+          <div className="text-xs text-gray-500">Total</div>
+          <div className="text-xl font-semibold">{stats.total}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500">Open</div>
+          <div className="text-xl font-semibold text-blue-600">
+            {stats.open}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500">Done</div>
+          <div className="text-xl font-semibold text-green-600">
+            {stats.done}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500">Completion</div>
+          <div className="text-xl font-semibold">{stats.completion}%</div>
+        </div>
+      </section>
+
+      {/* Create form */}
+      <section className="rounded border border-gray-200 bg-white p-4">
+        <form className="flex flex-col gap-3" onSubmit={handleCreateTask}>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">New task</label>
+            <input
+              type="text"
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Task title..."
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+            <textarea
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Optional description..."
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
             <button
-              onClick={() => setShowLinkModal(true)}
-              className="absolute top-0 right-0 flex items-center gap-2 px-3 py-1.5 bg-white border border-green-300 hover:border-green-400 text-green-700 hover:text-green-800 rounded-lg text-sm font-medium transition-all hover:shadow-md"
+              type="submit"
+              disabled={creating || !title.trim()}
+              className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              <span className="text-lg">📱</span>
-              <span>Link WhatsApp</span>
+              {creating ? 'Creating...' : 'Add task'}
             </button>
-          )}
 
-          {isLinked && (
-            <div className="absolute top-0 right-0 flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-300 text-green-700 rounded-lg text-sm font-medium">
-              <span className="text-lg">✅</span>
-              <span>Linked</span>
-            </div>
-          )}
-        </header>
-
-        {showBanner && !isLinked && (
-          <div className="mb-6 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-5 shadow-lg">
-            <div className="flex items-start gap-3">
-              <div className="text-3xl">🎉</div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-green-900 mb-1">
-                  Great! First task created!
-                </h3>
-                <p className="text-sm text-green-800 mb-3">
-                  Want to manage via WhatsApp too?
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowLinkModal(true)}
-                    className="bg-green-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-                  >
-                    Link Now
-                  </button>
-                  <button
-                    onClick={closeBanner}
-                    className="text-green-700 text-sm underline hover:text-green-800"
-                  >
-                    Not now
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showLinkModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl p-6 max-w-md w-full relative shadow-2xl">
+            <div className="flex gap-2 text-xs">
               <button
-                onClick={() => setShowLinkModal(false)}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl font-bold transition-colors"
+                type="button"
+                onClick={() => setFilter('all')}
+                className={`rounded px-2 py-1 ${
+                  filter === 'all'
+                    ? 'bg-gray-900 text-white'
+                    : 'border border-gray-300'
+                }`}
               >
-                ×
+                All
               </button>
-
-              <div className="text-center mb-6">
-                <div className="text-5xl mb-3">📱</div>
-                <h2 className="text-2xl font-bold text-gray-900">Link WhatsApp</h2>
-              </div>
-
-              <div className="bg-green-50 rounded-lg p-5 border-2 border-green-300 mb-4">
-                <p className="text-sm text-gray-600 mb-3">
-                  Send this message to the WhatsApp bot:
-                </p>
-                <code className="text-lg font-mono font-bold text-green-900 block text-center mb-4 bg-white p-3 rounded border border-green-200">
-                  #to-do-list link {linkCode}
-                </code>
-                <a
-                  href={getWhatsAppLink()}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block w-full bg-green-600 text-white py-3 rounded-lg text-center font-medium hover:bg-green-700 transition-colors"
-                >
-                  Open WhatsApp
-                </a>
-              </div>
-
-              <p className="text-xs text-gray-500 text-center">
-                After linking, your tasks will sync automatically
-              </p>
+              <button
+                type="button"
+                onClick={() => setFilter('open')}
+                className={`rounded px-2 py-1 ${
+                  filter === 'open'
+                    ? 'bg-gray-900 text-white'
+                    : 'border border-gray-300'
+                }`}
+              >
+                Open
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilter('done')}
+                className={`rounded px-2 py-1 ${
+                  filter === 'done'
+                    ? 'bg-gray-900 text-white'
+                    : 'border border-gray-300'
+                }`}
+              >
+                Done
+              </button>
             </div>
           </div>
+        </form>
+      </section>
+
+      {/* Task list */}
+      <section className="rounded border border-gray-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          Tasks
+        </h2>
+
+        {filteredTasks.length === 0 && !loading && (
+          <div className="text-sm text-gray-500">No tasks yet.</div>
         )}
 
-        <TaskForm userId={userId} onTaskCreated={handleTaskCreated} />
+        <ul className="flex flex-col gap-2">
+          {filteredTasks.map((task) => (
+            <li
+              key={task.id}
+              className="flex items-start justify-between gap-2 rounded border border-gray-200 p-3"
+            >
+              <div className="flex flex-1 flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleComplete(task)}
+                    className={`h-4 w-4 rounded border ${
+                      task.is_completed ? 'bg-green-500' : 'bg-white'
+                    }`}
+                    aria-label="Toggle complete"
+                  />
+                  <span
+                    className={`text-sm font-medium ${
+                      task.is_completed ? 'line-through text-gray-400' : ''
+                    }`}
+                  >
+                    {task.title}
+                  </span>
+                </div>
+                {task.description && (
+                  <p className="pl-6 text-xs text-gray-500">
+                    {task.description}
+                  </p>
+                )}
+                <p className="pl-6 text-[10px] text-gray-400">
+                  ID: {getShortId(task.id)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDeleteTask(task)}
+                className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+              >
+                Delete
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
 
-        <TaskList
-          userId={userId}
-          refreshKey={refreshKey}
-          onTaskUpdated={handleTaskUpdated}
-          onTasksLoaded={handleTasksLoaded}
-        />
-      </div>
+      {/* WhatsApp integration CTA */}
+      <section className="rounded border border-dashed border-green-400 bg-green-50 p-4 text-sm">
+        <h2 className="mb-2 text-sm font-semibold text-green-800">
+          Manage your tasks via WhatsApp
+        </h2>
+        <p className="mb-2 text-xs text-green-800">
+          Send this message to the WhatsApp bot:
+        </p>
+        <pre className="mb-2 rounded bg-white p-2 text-xs">
+          {`#to-do-list link ${linkCode}`}
+        </pre>
+        <button
+          type="button"
+          onClick={() => {
+            // Você pode trocar por um link real da Evolution API / número
+            window.open('https://wa.me/YOUR_WHATSAPP_NUMBER', '_blank');
+          }}
+          className="inline-flex items-center rounded bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+        >
+          Open WhatsApp
+        </button>
+        <p className="mt-2 text-[11px] text-green-900">
+          After linking, your tasks will sync automatically between the web app
+          and WhatsApp.
+        </p>
+      </section>
     </div>
   );
 }
