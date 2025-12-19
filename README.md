@@ -129,429 +129,283 @@ sequenceDiagram
     end
 ```
 
-## 📦 Project Structure
-
-```
+ ##📂 Project Structure
+ 
+bash
 taskflow/
 ├── app/
 │   ├── api/
-│   │   └── tasks/
-│   │       ├── route.ts
-│   │       └── [id]/
-│   │           └── route.ts
+│   │   ├── tasks/
+│   │   │   ├── route.ts          # GET/POST /api/tasks
+│   │   │   └── [id]/route.ts     # PATCH/DELETE /api/tasks/:id
+│   │   ├── link/
+│   │   │   └── route.ts          # Generate link codes for account linking
+│   │   ├── whatsapp/
+│   │   │   ├── webhook/route.ts  # WhatsApp inbound webhook (Evolution → N8N/TaskFlow)
+│   │   │   └── link/route.ts     # Handle WhatsApp link confirmation
+│   │   ├── profiles/route.ts     # Profile bootstrap / retrieval
+│   │   └── sessions/route.ts     # Chat sessions (WhatsApp context)
 │   ├── dashboard/
-│   │   └── page.tsx
-│   ├── globals.css
-│   ├── layout.tsx
-│   └── page.tsx
+│   │   ├── DashboardClient.tsx   # Client wrapper for dashboard
+│   │   └── page.tsx              # Dashboard page (server)
+│   ├── layout.tsx                # Root layout
+│   ├── page.tsx                  # Landing / redirect to dashboard
+│   └── globals.css               # Global styles
 ├── components/
-│   ├── ConfirmModal.tsx
-│   ├── DashboardContent.tsx
-│   ├── TaskForm.tsx
-│   ├── TaskItem.tsx
-│   └── TaskList.tsx
+│   ├── DashboardContent.tsx      # Main dashboard UI and logic
+│   ├── TaskForm.tsx              # Create/edit task form
+│   ├── TaskList.tsx              # List wrapper with filters
+│   ├── TaskItem.tsx              # Single task item (toggle, delete)
+│   └── ConfirmModal.tsx          # Reusable confirm modal
 ├── lib/
-│   ├── ai.ts
-│   ├── schemas.ts
-│   └── supabase.ts
+│   ├── supabase.ts               # Supabase client/helper
+│   ├── ai.ts                     # Reserved for AI helpers
+│   └── types.ts                  # Shared types
 ├── supabase/
-│   └── schema.sql
-├── types.ts
-├── .env.example
-├── .env.local
-├── .gitignore
-├── next-env.d.ts
-├── next.config.js
-├── package-lock.json
-├── package.json
-├── postcss.config.js
+│   └── schema.sql                # Database schema
+├── workflows/
+│   ├── Description_Enrich.json   # N8N AI enrichment workflow
+│   └── Task_Manager_Whatsapp.json# N8N WhatsApp workflow
 ├── README.md
-├── tailwind.config.ts
+├── package.json
 ├── tsconfig.json
-```
+├── tailwind.config.ts
+└── postcss.config.js
+🗄️ Database Model (Supabase)
+Defined in supabase/schema.sql.
+​
 
-## 🚀 Getting Started
+###Tables
+profiles
 
-### 1. Clone Repository
-```bash
-git clone https://github.com/yourusername/taskflow.git
+id uuid primary key default extensions.uuid_generate_v4()
+
+email text unique
+
+name text
+
+phone text unique
+
+is_guest boolean default true
+
+link_code text unique
+
+created_via text default 'web'
+
+Indexed by phone, link_code, is_guest.​
+
+tasks
+
+id uuid primary key default extensions.uuid_generate_v4()
+
+user_id text not null
+
+title text not null
+
+description text
+
+is_completed boolean default false
+
+created_at timestamptz default now()
+
+updated_at timestamptz default now()
+
+Indexes: is_completed, created_at desc, user_id.
+
+Trigger tasks_updated_at to maintain updated_at.​
+
+chat_sessions
+
+id uuid primary key default gen_random_uuid()
+
+user_phone text unique not null
+
+is_active boolean default true
+
+created_at timestamptz default now()
+
+last_interaction timestamptz default now()
+
+context jsonb default '{}'::jsonb
+
+Indexes on user_phone, is_active.​
+
+🚀 Getting Started
+Prerequisites
+Node.js and npm.
+
+Supabase project with SQL functions and uuid-ossp/pgcrypto enabled (for uuid_generate_v4 and gen_random_uuid).​
+
+Optional: N8N instance and Evolution API account for WhatsApp integration.
+​
+
+1. Clone and install
+bash
+git clone <your-repo-url>.git
 cd taskflow
 npm install
-```
-### 2. Supabase Setup
+2. Configure Supabase
+In the Supabase SQL editor, run supabase/schema.sql.​
 
+Ensure the update_updated_at() trigger function exists or create it before running the tasks_updated_at trigger.​
 
-Run the following SQL in your Supabase **SQL Editor** to criar as tabelas e índices necessários:
-```sql
--- 1. Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+3. Environment variables
+Create a .env.local file (see your .env.example if present) with at least:
 
--- 2. Profiles table
-create table public.profiles (
-  id uuid not null default extensions.uuid_generate_v4 (),
-  email text null,
-  name text null,
-  created_at timestamp with time zone null default now(),
-  phone text null,
-  is_guest boolean null default true,
-  link_code text null,
-  created_via text null default 'web'::text,
-  constraint profiles_pkey primary key (id),
-  constraint profiles_email_key unique (email),
-  constraint profiles_link_code_key unique (link_code),
-  constraint profiles_phone_key unique (phone)
-) TABLESPACE pg_default;
+bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
 
-create index IF not exists idx_profiles_phone on public.profiles using btree (phone) TABLESPACE pg_default
-where
-  (phone is not null);
+# Optional – used by N8N/Evolution and AI
+EVOLUTION_API_BASE_URL=...
+EVOLUTION_API_INSTANCE_ID=...
+EVOLUTION_API_TOKEN=...
+OPENAI_API_KEY=...
+These keys are used by the Supabase client and by external automation (N8N).
+​
 
-create index IF not exists idx_profiles_link_code on public.profiles using btree (link_code) TABLESPACE pg_default
-where
-  (link_code is not null);
-
-create index IF not exists idx_profiles_is_guest on public.profiles using btree (is_guest) TABLESPACE pg_default;
-
--- 3. Tasks table
-create table public.tasks (
-  id uuid not null default extensions.uuid_generate_v4 (),
-  user_id text not null,
-  title text not null,
-  description text null,
-  is_completed boolean null default false,
-  created_at timestamp with time zone null default now(),
-  updated_at timestamp with time zone null default now(),
-  constraint tasks_pkey primary key (id)
-) TABLESPACE pg_default;
-
-create index IF not exists idx_tasks_completed on public.tasks using btree (is_completed) TABLESPACE pg_default;
-
-create index IF not exists idx_tasks_created_at on public.tasks using btree (created_at desc) TABLESPACE pg_default;
-
-create index IF not exists idx_tasks_user_id on public.tasks using btree (user_id) TABLESPACE pg_default;
-
-create trigger tasks_updated_at BEFORE
-update on tasks for EACH row
-execute FUNCTION update_updated_at ();
-
--- 4. Chat Sessions table
-create table public.chat_sessions (
-  id uuid not null default gen_random_uuid (),
-  user_phone text not null,
-  is_active boolean null default true,
-  created_at timestamp with time zone null default now(),
-  last_interaction timestamp with time zone null default now(),
-  context jsonb null default '{}'::jsonb,
-  constraint chat_sessions_pkey primary key (id),
-  constraint chat_sessions_user_phone_key unique (user_phone)
-) TABLESPACE pg_default;
-
-create index IF not exists idx_chat_sessions_phone on public.chat_sessions using btree (user_phone) TABLESPACE pg_default;
-
-create index IF not exists idx_chat_sessions_active on public.chat_sessions using btree (is_active) TABLESPACE pg_default;
-```
-
-> **Nota:** Não é mais necessário criar usuário demo manualmente. O perfil é criado e vinculado automaticamente ao acessar o app (web ou WhatsApp).
-
-### 3. Environment Variables
-
-Create `.env.local` in your project root:
-
-Supabase Configuration
-```bash
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5...
-```
-
-### 4. Run
-```bash
+4. Run the app
+bash
 npm run dev
-```
+The app will be available at http://localhost:3000.
 
-O usuário é criado e gerenciado automaticamente pelo sistema, não sendo necessário configurar manualmente o USER_ID.
-## 📡 REST API Documentation
+The dashboard is served at /dashboard and will bootstrap a profile for the current user if needed.
 
-### Endpoints
+📡 REST API
+GET /api/tasks
+List all tasks for a given user.​
 
-#### GET /api/tasks
-List all tasks for a user
+Query: userId (required) – the user identifier (tasks.user_id).​
 
-**Query Parameters:**
-- `user_id` (required): UUID of the user
+Example:
 
-**Example:**
-```
-curl "https://your-app.vercel.app/api/tasks?user_id=YOUR_USER_ID"
-```
-**Response:**
-```
+bash
+curl "https://your-app.com/api/tasks?userId=USER_ID"
+Response (200):
+
+json
 {
-"success": true,
-"data": [
-{
-"id": "uuid",
-"user_id": "uuid",
-"title": "Task title",
-"description": "Optional description",
-"is_completed": false,
-"created_at": "2025-12-17T...",
-"updated_at": "2025-12-17T..."
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "user_id": "USER_ID",
+      "title": "Task title",
+      "description": "Optional description",
+      "is_completed": false,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ]
 }
-]
-}
-```
-#### POST /api/tasks
-Create a new task
-
-**Body:**
-```
-{
-"user_id": "uuid",
-"title": "Task title",
-"description": "Optional description"
-}
-```
-**Example:**
-```
-curl -X POST https://your-app.vercel.app/api/tasks
--H "Content-Type: application/json"
--d '{"user_id":"YOUR_USER_ID","title":"Buy milk"}'
-```
-#### PATCH /api/tasks/:id
-Update a task (mark as completed, change title, etc)
-
-**Body:**
-```
-{
-"is_completed": true,
-"title": "Updated title"
-}
-```
-**Example:**
-```
-curl -X PATCH https://your-app.vercel.app/api/tasks/TASK_ID
--H "Content-Type: application/json"
--d '{"is_completed":true}'
-```
-#### DELETE /api/tasks/:id
-Delete a task permanently
-
-**Example:**
-```
-curl -X DELETE https://your-app.vercel.app/api/tasks/TASK_ID
-```
-## 🤖 N8N Integration Guide
-
-### Workflow Logic
-`[Webhook] → [Parse Command] → [Call TaskFlow API] → [Format Response] → [Send WhatsApp]`
-
-### Node 2: Function (Parse Command)
-```markdown
-// Parse WhatsApp message
-const message = $input.item.json.body.message || '';
-const phone = $input.item.json.body.from || '';
-const senderName = $input.item.json.body.senderName || 'User';
-
-// Parse: /task <action> <text>
-const parts = message.trim().split(' ');
-const command = parts?.toLowerCase();​
-const taskText = parts.slice(2).join(' ');
-
-// Your user ID (in production, map phone → user)
-const userId = 'YOUR_USER_ID_HERE'; // Replace with your UUID
-
-return {
-command, // add, list, done, delete
-taskText, // task title or task ID
-userId,
-phone,
-senderName
-};
-```
-### Node 3: Switch (Route by Command)
-```markdown
-Configure a Switch node with these rules:
-
-Rule	Condition	Output
-0	{{ $json.command }} equals add	Create Task
-1	{{ $json.command }} equals list	List Tasks
-2	{{ $json.command }} equals done	Complete Task
-3	{{ $json.command }} equals delete	Delete Task
-Fallback	(default)	Help Message
-```
-
-Node 4a: HTTP Request (Create Task)
-Method: POST
-```
-URL: https://your-app.vercel.app/api/tasks
+POST /api/tasks
+Create a new task.​
 
 Body:
 
+json
 {
-  "user_id": "={{ $json.userId }}",
-  "title": "={{ $json.taskText }}"
+  "userId": "USER_ID",
+  "title": "Task title",
+  "description": "Optional description"
 }
-```
-Node 4b: HTTP Request (List Tasks)
-Method: GET
-```
-URL: https://your-app.vercel.app/api/tasks?user_id={{ $json.userId }}
-```
-Node 4c: HTTP Request (Complete Task)
-Method: PATCH
-```
-URL: https://your-app.vercel.app/api/tasks/{{ $json.taskText }}
+Also accepts legacy user_id in the body; userId takes precedence.​
 
-Body:
+PATCH /api/tasks/:id
+Update an existing task (title, description, or completion status).
+
+Body supports userId and status fields (is_completed, isCompleted, or iscompleted).
+
+Example body:
+
+json
 {
-  "is_completed": true
+  "userId": "USER_ID",
+  "is_completed": true,
+  "title": "Updated title"
 }
-```
-Node 4d: HTTP Request (Delete Task)
-Method: DELETE
-```
-URL: https://your-app.vercel.app/api/tasks/{{ $json.taskText }}
-```
+DELETE /api/tasks/:id
+Delete a task.
 
-Node 5: Function (Format Response)
-```
-const response = $input.item.json;
-const phone = $input.first().json.phone;
-const command = $input.first().json.command;
+Validates userId via query or body (depending on your implementation in route.ts).
 
-let message = '';
+📱 WhatsApp Linking & Automation
+Dashboard linking UI
+The dashboard shows a dedicated WhatsApp linking section:​
 
-if (!command || command === 'help') {
-  message = `*TaskFlow Commands:*\n\n`;
-  message += `📝 /task add [title] - Create\n`;
-  message += `📋 /task list - View all\n`;
-  message += `✅ /task done [id] - Complete\n`;
-  message += `🗑️ /task delete [id] - Delete`;
-} else if (command === 'list' && response.success) {
-  const tasks = response.data || [];
-  message = `📋 *Tasks (${tasks.length})*\n\n`;
-  tasks.forEach((t, i) => {
-    message += `${i+1}. ${t.is_completed ? '✅' : '⏳'} ${t.title}\n`;
-    message += `   ID: ${t.id.substring(0, 8)}\n\n`;
-  });
-} else if (command === 'add' && response.success) {
-  message = `✅ *Task Created!*\n\n${response.data.title}`;
-} else if (response.success) {
-  message = `✅ ${command === 'done' ? 'Task completed!' : 'Task deleted!'}`;
-} else {
-  message = `❌ Error: ${response.error}`;
-}
+Explains that you can control TaskFlow from your phone and unlink at any time.
 
-return { phone, message };
-```
-Node 6: HTTP Request (Send WhatsApp)
-Method: POST
-```
-URL: https://evolution.yourdomain.com/message/sendText/YOUR_INSTANCE
+Provides a two‑step flow:
 
-Body:
-{
-  "number": "={{ $json.phone }}",
-  "text": "={{ $json.message }}"
-}
-```
+Activate TaskFlow: send a specific activation message to the WhatsApp bot.
 
-## 📡 REST API Documentation
+Link your account: send the generated link code to connect your phone to your web account.​
 
-### Endpoints
+When linking is in progress, the UI shows a “Waiting for WhatsApp link...” state until the backend confirms the link.​
 
-#### GET /api/tasks
+Backend endpoints
+Dedicated API routes handle:
 
-List all tasks for a user.
+Link generation – create a link_code for the current profile so the phone can be attached.
 
-**Query Parameters:**
+WhatsApp webhook – receive inbound messages, map them to a chat_session, and forward to N8N/automation as needed.
 
-- `userId` (required): UUID of the user (matches `profiles.id` in Supabase)
+Session management – store/update chat_sessions.context and last_interaction based on user messages.​
 
-**Example:**
+🤖 N8N Workflows
+1. Description_Enrich
+A reusable workflow triggered by other workflows (e.g., Task_Manager_Whatsapp) to enrich task descriptions using AI.​
 
-curl "https://your-app.vercel.app/api/tasks?userId=YOUR_USER_ID"
+Trigger: When Executed by Another Workflow.
 
+Extracts taskId, title, userId from the incoming payload (prepare_enrich_payload).​
 
-**Response:**
+Calls an AI Agent (OpenAI gpt-4.1-mini) with a structured prompt to:
 
-{
-"success": true,
-"data": [
-{
-"id": "uuid",
-"user_id": "uuid",
-"title": "Task title",
-"description": "Optional description",
-"is_completed": false,
-"created_at": "2025-12-17T...",
-"updated_at": "2025-12-17T..."
-}
-]
-}
+Write a concise description.
 
-#### POST /api/tasks
+Optionally add a 3–5 item checklist.
 
-Create a new task.
+Never mention AI.​
 
-**Body:**
+Normalizes agent output and calls:
 
-{
-"userId": "uuid",
-"title": "Task title",
-"description": "Optional description"
-}
+text
+PATCH /api/tasks/{{ taskId }}?userId={{ userId }}
+to update the description.​
 
-> For backward compatibility, `{ "user_id": "uuid" }` is also accepted, but `userId` is preferred.
+2. Task_Manager_Whatsapp
+Full WhatsApp workflow to manage tasks through commands and natural language.​
 
-**Example:**
+High‑level behavior
 
-curl -X POST https://your-app.vercel.app/api/tasks
--H "Content-Type: application/json"
--d '{"userId":"YOUR_USER_ID","title":"Buy milk"}'
+Webhook receives messages from Evolution API with message, from, senderName, etc.
 
+Resolves or creates profiles/chat_sessions based on phone number.
+​
 
-#### PATCH /api/tasks/:id
+Detects whether the input is:
 
-Update a task (mark as completed, change title, etc).
+/task ... or #to-do-list type command.
 
-**Body:**
+A free‑form sentence interpreted with AI.​
 
-{
-"userId": "uuid",
-"is_completed": true,
-"title": "Updated title"
-}
+Calls /api/tasks (GET/POST/PATCH/DELETE) to manage tasks.
+​
 
-> Also accepts `isCompleted` or `iscompleted` from legacy clients.
+Optionally calls Description_Enrich after creating a task.
+​
 
-**Example:**
+Formats human‑friendly replies and sends them back via Evolution API.​
 
-curl -X PATCH https://your-app.vercel.app/api/tasks/TASK_ID
--H "Content-Type: application/json"
--d '{"userId":"YOUR_USER_ID","is_completed":true}'
+🧪 Development Notes
+Types: shared types for tasks and API responses are defined in types.ts.
 
+Styling: Tailwind config and globals.css define the main design system (colors, fonts, layout).
 
-#### DELETE /api/tasks/:id
+Client logic: the main dashboard logic (filters, stats, modals, linking state) lives in DashboardContent.tsx and DashboardClient.tsx.​
 
-Delete a task permanently.
-
-**Query Parameters:**
-
-- `userId` (required): UUID of the user
-
-**Example:**
-
-curl -X DELETE "https://your-app.vercel.app/api/tasks/TASK_ID?userId=YOUR_USER_ID"
-
-### WhatsApp Commands
-
-Activate it on WhatsApp with the command:
-#to-do-list
-
-Once you activate it, you can interact in natural language chat the AI to create, delete or mark as completed, or rather choose the options numbers.
-
-## 📄 License
-
-MIT License - Copyright (c) 2025 TaskFlow
+📄 License
+This project can be licensed under MIT (or the license chosen by your organization).
+Make sure to add a LICENSE file in the repository root if it is not already present.
