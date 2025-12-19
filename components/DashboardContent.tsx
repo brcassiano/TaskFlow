@@ -44,11 +44,11 @@ export default function DashboardContent() {
           const formattedPhone = phoneParam.includes('@s.whatsapp.net')
             ? phoneParam
             : `${phoneParam}@s.whatsapp.net`;
-          
+
           // Buscar profile pelo phone
           const res = await fetch(`/api/profiles/current?userId=${formattedPhone}`);
           const data = await res.json();
-          
+
           if (data.success && data.data) {
             currentUserId = data.data.id;
             setProfile(data.data);
@@ -58,7 +58,7 @@ export default function DashboardContent() {
           // Buscar profile existente
           const res = await fetch(`/api/profiles/current?userId=${currentUserId}`);
           const data = await res.json();
-          
+
           if (data.success && data.data) {
             setProfile(data.data);
           } else {
@@ -74,9 +74,9 @@ export default function DashboardContent() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({}),
           });
-          
+
           const data = await res.json();
-          
+
           if (data.success && data.data) {
             currentUserId = data.data.id;
             setProfile(data.data);
@@ -98,14 +98,14 @@ export default function DashboardContent() {
   // Mostrar banner de link se tiver tasks e não estiver linkado
   useEffect(() => {
     if (!profile) return;
-    
+
     const isLinked = profile.phone && !profile.is_guest;
-    
+
     if (isLinked || taskCount === 0) {
       setShowBanner(false);
       return;
     }
-    
+
     setShowBanner(true);
   }, [taskCount, profile]);
 
@@ -117,10 +117,10 @@ export default function DashboardContent() {
       try {
         const res = await fetch(`/api/profiles/current?userId=${userId}`);
         const data = await res.json();
-        
+
         if (data.success && data.data) {
           setProfile(data.data);
-          
+
           // Se foi vinculado, fechar modal
           if (data.data.phone && !data.data.is_guest) {
             setLinkingStatus('linked');
@@ -203,9 +203,7 @@ export default function DashboardContent() {
           >
             <span className="text-lg">📱</span>
             <span>
-              {isLinked
-                ? `Linked to ${profile?.phone?.split('@')[0]}`
-                : 'Link WhatsApp'}
+              {isLinked ? 'Linked to WhatsApp' : 'Link WhatsApp'}
             </span>
           </button>
         </header>
